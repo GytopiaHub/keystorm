@@ -1,0 +1,4 @@
+# Words never used as falling words: profanity, proper nouns and oddities.
+# Skill names are filtered separately from src/data/skills.json.
+damn hell crap piss shit fuck bitch bastard slut whore cunt dick cock prick twat wank
+august june november wednesday halloween minnesota william fireworm dynamited scrapper

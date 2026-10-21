@@ -1,0 +1,49 @@
+{
+  "field": {
+    "width": 960,
+    "height": 560,
+    "rowHeight": 28,
+    "baseDangerRows": 10,
+    "wordHeight": 30,
+    "charWidth": 13.2,
+    "wordPadding": 18,
+    "spawnBandHeight": 70,
+    "maxWords": 30
+  },
+  "chargePool": { "baseCapacity": 5 },
+  "combo": {
+    "tiers": [
+      { "min": 0, "multiplier": 1 },
+      { "min": 5, "multiplier": 1.5 },
+      { "min": 10, "multiplier": 2 },
+      { "min": 20, "multiplier": 2.5 },
+      { "min": 35, "multiplier": 3 }
+    ]
+  },
+  "scoring": { "pointsPerLetter": 10, "mistakePenalty": 25 },
+  "coins": {
+    "perWord": 1,
+    "coinWordBonus": 5,
+    "levelReward": { "base": 20, "perLevel": 5 },
+    "perfectMultiplier": 1
+  },
+  "caps": {
+    "maxFallSpeed": 150,
+    "minSpawnInterval": 0.5,
+    "maxWordLength": 14,
+    "maxCoinWordChance": 0.15,
+    "maxBlackChance": 0.2,
+    "maxChargeWordChance": 0.2
+  },
+  "blackWord": { "speedMultiplier": 2, "maxMultiplier": 8 },
+  "magnet": { "pullSpeed": 260, "hoverRowsAbovePile": 2 },
+  "difficulty": {
+    "easy":   { "label": "Easy",   "speed": 0.8, "interval": 1.25 },
+    "normal": { "label": "Normal", "speed": 1.0, "interval": 1.0 },
+    "hard":   { "label": "Hard",   "speed": 1.2, "interval": 0.85 }
+  },
+  "wordLists": {
+    "standard": { "label": "Standard (all lengths)" },
+    "short":    { "label": "Short words (6 letters max)", "maxLength": 6 }
+  }
+}
