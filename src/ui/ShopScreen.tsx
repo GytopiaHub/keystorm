@@ -2,7 +2,7 @@ import { useState, type CSSProperties } from 'react';
 import { CONFIG, skillPrice, upgradePrice } from '../engine/config';
 import type { SkillId, UpgradeId } from '../engine/types';
 import { useGame } from '../state/store';
-import { Button, Coins, ROMAN, Screen } from './common';
+import { Button, Coins, ROMAN, Screen, SkillIcon } from './common';
 
 type Tab = 'skills' | 'upgrades';
 
@@ -93,13 +93,14 @@ function SkillCard({ id }: { id: SkillId }) {
       data-testid={`skill-${id}`}
     >
       <div className="flex items-center gap-3">
-        <span
-          aria-hidden
-          className="flex h-10 w-10 items-center justify-center rounded-xl text-xl"
-          style={{ background: `${def.color}26`, boxShadow: `0 0 0 2px ${def.color}, 0 0 18px -2px ${def.color}` }}
-        >
-          {def.icon}
-        </span>
+        <div className="relative grid h-16 w-16 shrink-0 place-items-center">
+          <div
+            aria-hidden
+            className="absolute inset-2 rounded-full blur-lg"
+            style={{ background: def.color, opacity: tier ? 0.45 : 0.08 }}
+          />
+          <SkillIcon id={id} size={60} className={`relative ${tier ? '' : 'locked-icon'}`} />
+        </div>
         <div className="flex-1">
           <div className="font-display font-black tracking-wider" style={{ color: def.color, textShadow: `0 0 12px ${def.color}88` }}>
             {id}

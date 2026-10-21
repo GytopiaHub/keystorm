@@ -2,17 +2,22 @@ import { useState } from 'react';
 import { CONFIG } from '../engine/config';
 import type { Difficulty, WordListId } from '../engine/types';
 import { useGame } from '../state/store';
-import { Button, Coins, Screen, Stat, StormBackdrop } from './common';
+import { ART } from '../assets/art';
+import { Button, Coins, GameIcon, Screen, SkillIcon, Stat, StormBackdrop } from './common';
 
 export function MainMenu() {
   const progress = useGame((s) => s.progress);
   const { startLevel, goTo, openShop } = useGame.getState();
   return (
     <StormBackdrop className="flex items-center justify-center p-4">
-      <div className="screen-in flex w-full max-w-md flex-col items-center gap-7">
+      <div className="screen-in flex w-full max-w-xl flex-col items-center gap-6">
         <div className="text-center">
-          <h1 className="title-storm text-5xl tracking-[0.14em] sm:text-7xl">KEYSTORM</h1>
-          <p className="mt-3 text-xs uppercase tracking-[0.35em] text-cyan-200/70">Type before the flood rises</p>
+          <h1>
+            <img src={ART.logo} alt="Keystorm" className="logo mx-auto w-[min(560px,88vw)]" draggable={false} />
+          </h1>
+          <p className="-mt-1 text-xs uppercase tracking-[0.35em] text-cyan-100/80 [text-shadow:0_2px_8px_#000]">
+            Type before the flood rises
+          </p>
         </div>
         <div className="glass flex items-center gap-6 rounded-full px-5 py-2 text-sm text-slate-300">
           <span className="flex items-baseline gap-2">
@@ -22,7 +27,7 @@ export function MainMenu() {
           <span className="h-5 w-px bg-white/15" />
           <Coins value={progress.coins} />
         </div>
-        <div className="glass stagger flex w-full flex-col gap-2.5 rounded-3xl p-5">
+        <div className="glass stagger flex w-full max-w-md flex-col gap-2.5 rounded-3xl p-5">
           <Button variant="primary" className="py-3.5 font-display text-lg tracking-widest" autoFocus onClick={() => startLevel(progress.currentLevel)}>
             Play level {progress.currentLevel}
           </Button>
@@ -33,14 +38,22 @@ export function MainMenu() {
             <Button onClick={() => goTo('settings')}>Settings</Button>
           </div>
         </div>
-        <details className="glass w-full rounded-2xl px-5 py-3 text-sm text-slate-400">
+        <details className="glass w-full max-w-md rounded-2xl px-5 py-3 text-sm text-slate-300">
           <summary className="cursor-pointer select-none text-slate-300">How to play</summary>
-          <ul className="mt-2 list-disc space-y-1 pl-5">
+          <ul className="mt-2 list-disc space-y-1.5 pl-5">
             <li>Type a falling word and press Space or Enter to clear it.</li>
             <li>Missed words land and pile up. If the pile reaches the red line, the level is failed.</li>
             <li>Reach the score quota to pass. Accurate typing builds a combo multiplier; mistakes reset it.</li>
-            <li>Gold words give bonus coins. Thundercloud words speed up when you mistype.</li>
-            <li>Buy skills in the shop. Clear coloured charge words to fill your charge pool, then type a skill’s name to fire it.</li>
+            <li>
+              <GameIcon name="coin" size={18} className="-mt-0.5 mr-1 align-middle" />
+              Gold words give bonus coins. <GameIcon name="storm" size={18} className="-mt-0.5 mx-1 align-middle" />
+              Thundercloud words speed up when you mistype.
+            </li>
+            <li>
+              Buy skills in the shop. Clear charge words marked with a skill’s icon (like{' '}
+              <SkillIcon id="FIRE" size={18} className="-mt-0.5 align-middle" />) to fill your charge pool, then type the skill’s
+              name to fire it.
+            </li>
             <li>Esc pauses.</li>
           </ul>
         </details>

@@ -1,20 +1,21 @@
 import { Application, useApplication, useTick } from '@pixi/react';
+import { Assets } from 'pixi.js';
+import { FIELD_TEXTURES } from '../assets/art';
 import { useEffect, useRef } from 'react';
 import { CONFIG } from '../engine/config';
 import type { GameEngine } from '../engine/engine';
 import type { EngineEvent } from '../engine/types';
 import { FieldRenderer } from './fieldRenderer';
 
-let fontsLoaded: Promise<unknown> | null = null;
-function fontsReady(): Promise<unknown> {
-  fontsLoaded ??= Promise.race([
-    Promise.all([
-      document.fonts?.load('700 22px "JetBrains Mono"'),
-      document.fonts?.load('900 40px "Exo 2"'),
-    ]),
+let assetsLoaded: Promise<unknown> | null = null;
+/** Fonts (Pixi measures text when it's created) and art textures, loaded once per session. */
+function assetsReady(): Promise<unknown> {
+  const fonts = Promise.race([
+    Promise.all([document.fonts?.load('700 22px "JetBrains Mono"'), document.fonts?.load('900 40px "Exo 2"')]),
     new Promise((resolve) => setTimeout(resolve, 1500)),
   ]).catch(() => undefined);
-  return fontsLoaded;
+  assetsLoaded ??= Promise.all([fonts, Assets.load(FIELD_TEXTURES)]);
+  return assetsLoaded;
 }
 
 interface Props {
@@ -53,8 +54,7 @@ function Scene({ engine, paused, reducedMotion, onFrame }: Props) {
     if (!isInitialised) return;
     let r: FieldRenderer | null = null;
     let cancelled = false;
-    // Pixi measures text when it's created, so the word font must be loaded first.
-    fontsReady().then(() => {
+    assetsReady().then(() => {
       if (cancelled) return;
       r = new FieldRenderer(latest.current.reducedMotion);
       app.stage.addChild(r.root);

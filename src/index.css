@@ -70,6 +70,49 @@ body {
   64% { opacity: 0.55; }
 }
 
+/* Key art fills the backdrop; it drifts slowly like a camera push-in. */
+.art-bg {
+  position: absolute;
+  inset: -3%;
+  z-index: -3;
+  background-size: cover;
+  background-position: center;
+  animation: push-in 40s ease-in-out infinite alternate;
+}
+.art-dim {
+  filter: blur(7px) brightness(0.45) saturate(1.15);
+}
+.art-shade {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 45%, rgba(3, 5, 12, 0.55), transparent 75%),
+    linear-gradient(180deg, rgba(3, 5, 12, 0.35), rgba(3, 5, 12, 0.1) 40%, rgba(3, 5, 12, 0.6));
+}
+@keyframes push-in {
+  to {
+    transform: scale(1.08) translate(-1%, 1%);
+  }
+}
+
+.logo {
+  filter: drop-shadow(0 0 22px rgba(34, 211, 238, 0.55)) drop-shadow(0 6px 30px rgba(0, 0, 0, 0.8));
+  animation:
+    float 6s ease-in-out infinite,
+    flicker 9s infinite;
+}
+@keyframes float {
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+/* Locked shop skills show their icon greyed out. */
+.locked-icon {
+  filter: grayscale(1) brightness(0.55);
+}
+
 .falling-word {
   position: absolute;
   top: -10%;

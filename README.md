@@ -31,5 +31,6 @@ The game engine runs without a browser and takes a seed, so tests are repeatable
 | `src/audio/` | Sound effects synthesised at startup and played through Howler. |
 | `src/data/` | Tuning data: level table, skills, upgrades, gameplay constants, word list. |
 | `data/` | Source word lists and blocklist. `npm run words` rebuilds `src/data/words.json`. |
+| `assets/` | Source art (generated images). `npm run art` keys, crops and compresses them into `src/assets/`. |
 
 All tuning values (level curve, prices, skill tiers, rewards, caps) live in `src/data/*.json`, not in code.

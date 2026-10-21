@@ -5,7 +5,8 @@ import type { HudSnapshot } from '../engine/engine';
 import type { EngineEvent, SkillId } from '../engine/types';
 import { FieldCanvas } from '../render/FieldCanvas';
 import { useGame } from '../state/store';
-import { Button, Coins } from './common';
+import { ART } from '../assets/art';
+import { Button, Coins, SkillIcon } from './common';
 
 /** Seconds to linger on the field after the quota is met or the pile tops out. */
 const END_DELAY = 1.8;
@@ -53,6 +54,8 @@ export function PlayScreen() {
   if (!engine) return null;
   return (
     <div className="storm-bg flex h-screen flex-col">
+      {/* The field's own sky, blurred, fills the letterbox around the canvas. */}
+      <div aria-hidden className="art-bg art-dim" style={{ backgroundImage: `url(${ART.sky})` }} />
       <TopBar />
       <div className="relative min-h-0 flex-1">
         <div className={`h-full w-full ${paused ? 'invisible' : ''}`}>
@@ -275,7 +278,7 @@ function EffectsBar() {
             style={{ boxShadow: `0 0 0 1px ${def.color}, 0 0 16px -2px ${def.color}` }}
           >
             <div className="flex items-center gap-1.5 px-2 py-1">
-              <span aria-hidden>{def.icon}</span>
+              <SkillIcon id={c.skill} size={22} />
               <span className="font-semibold tabular-nums">{c.text}</span>
             </div>
             {c.frac !== undefined && (
@@ -401,7 +404,7 @@ function ChargePool({ hud, buffer, skills }: { hud: HudSnapshot; buffer: string;
         return (
           <div
             key={`${s}${counts.get(s)}`}
-            className={`toast-in flex items-center gap-1 rounded-lg px-1.5 py-1 text-xs font-bold transition ${hot ? 'scale-110 bg-white/15' : 'bg-black/40'}`}
+            className={`toast-in flex items-center gap-1 rounded-xl py-1 pl-1 pr-2 text-xs font-bold transition ${hot ? 'scale-110 bg-white/15' : 'bg-black/50'}`}
             style={{
               color: def.color,
               boxShadow: `0 0 0 ${hot ? 2 : 1}px ${def.color}, 0 0 ${hot ? 22 : 10}px -2px ${def.color}`,
@@ -409,8 +412,13 @@ function ChargePool({ hud, buffer, skills }: { hud: HudSnapshot; buffer: string;
             title={`${s} — Tier ${skills[s]}`}
           >
             {Array.from({ length: counts.get(s)! }, (_, i) => (
-              <span key={i} aria-hidden className="flex h-5 w-5 items-center justify-center rounded text-[12px]" style={{ background: `${def.color}33` }}>
-                {def.icon}
+              <span
+                key={i}
+                aria-hidden
+                className="flex h-8 w-8 items-center justify-center rounded-lg"
+                style={{ background: `radial-gradient(circle, ${def.color}55, transparent 70%)` }}
+              >
+                <SkillIcon id={s} size={28} />
               </span>
             ))}
             <span className="ml-0.5 font-display tracking-wide">
@@ -420,7 +428,7 @@ function ChargePool({ hud, buffer, skills }: { hud: HudSnapshot; buffer: string;
         );
       })}
       {Array.from({ length: empty }, (_, i) => (
-        <span key={`e${i}`} className="h-7 w-5 rounded border border-dashed border-white/15" aria-hidden />
+        <span key={`e${i}`} className="h-8 w-8 rounded-lg border border-dashed border-white/20 bg-black/30" aria-hidden />
       ))}
       <span className="sr-only">
         {hud.pool.length} of {hud.capacity} charges

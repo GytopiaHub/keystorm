@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { ART, iconUrl } from '../assets/art';
 import wordsJson from '../data/words.json';
+import { CONFIG } from '../engine/config';
+import type { SkillId } from '../engine/types';
 import { useGame } from '../state/store';
 
 export const ROMAN = ['—', 'I', 'II', 'III'];
@@ -27,8 +30,30 @@ export function Button({
   );
 }
 
-/** Animated storm sky with words drifting down behind menus. */
-export function StormBackdrop({ children, className = '' }: { children: ReactNode; className?: string }) {
+/** An icon from the art set: a skill's icon name, 'coin' or 'storm'. Decorative by default. */
+export function GameIcon({ name, size = 24, className = '', alt = '' }: { name: string; size?: number; className?: string; alt?: string }) {
+  return (
+    <img
+      src={iconUrl(name)}
+      width={size}
+      height={size}
+      alt={alt}
+      aria-hidden={alt ? undefined : true}
+      draggable={false}
+      className={`inline-block shrink-0 select-none ${className}`}
+    />
+  );
+}
+
+export function SkillIcon({ id, size = 24, className = '' }: { id: SkillId; size?: number; className?: string }) {
+  return <GameIcon name={CONFIG.skills[id].icon} size={size} className={className} />;
+}
+
+/**
+ * Storm backdrop behind every non-play screen: the key art, rain, lightning and words drifting
+ * down. `dim` blurs and darkens the art so panels on top stay readable.
+ */
+export function StormBackdrop({ children, className = '', dim = false }: { children: ReactNode; className?: string; dim?: boolean }) {
   const words = useMemo(() => {
     const pool = [...wordsJson.buckets['3-4'], ...wordsJson.buckets['5-6'], ...wordsJson.buckets['7-8']];
     return Array.from({ length: 22 }, (_, i) => ({
@@ -41,16 +66,20 @@ export function StormBackdrop({ children, className = '' }: { children: ReactNod
   }, []);
   return (
     <div className={`storm-bg min-h-screen ${className}`}>
-      {words.map((w, i) => (
-        <span
-          key={i}
-          aria-hidden
-          className="falling-word"
-          style={{ left: `${w.left}%`, animationDuration: `${w.duration}s`, animationDelay: `${w.delay}s`, fontSize: w.size }}
-        >
-          {w.text}
-        </span>
-      ))}
+      <div aria-hidden className={`art-bg ${dim ? 'art-dim' : ''}`} style={{ backgroundImage: `url(${ART.menu})` }} />
+      <div aria-hidden className="art-shade" />
+      {/* The key art has its own falling letters, so drifting words only go behind panels. */}
+      {dim &&
+        words.map((w, i) => (
+          <span
+            key={i}
+            aria-hidden
+            className="falling-word"
+            style={{ left: `${w.left}%`, animationDuration: `${w.duration}s`, animationDelay: `${w.delay}s`, fontSize: w.size }}
+          >
+            {w.text}
+          </span>
+        ))}
       {children}
     </div>
   );
@@ -58,7 +87,7 @@ export function StormBackdrop({ children, className = '' }: { children: ReactNod
 
 export function Screen({ title, children, footer }: { title: ReactNode; children: ReactNode; footer?: ReactNode }) {
   return (
-    <StormBackdrop className="flex items-center justify-center p-4">
+    <StormBackdrop dim className="flex items-center justify-center p-4">
       <div className="glass screen-in flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col rounded-2xl">
         <h1 className="border-b border-white/10 px-6 py-4 font-display text-2xl font-bold tracking-wider">{title}</h1>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>
@@ -77,15 +106,8 @@ export function Stat({ label, value, accent }: { label: string; value: ReactNode
   );
 }
 
-export function CoinIcon({ className = '' }: { className?: string }) {
-  return (
-    <span
-      aria-hidden
-      className={`inline-flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-b from-amber-200 to-amber-500 text-[11px] font-black text-amber-950 shadow-[0_0_10px_rgba(251,191,36,0.6)] ring-1 ring-amber-100/70 ${className}`}
-    >
-      $
-    </span>
-  );
+export function CoinIcon({ size = 22, className = '' }: { size?: number; className?: string }) {
+  return <GameIcon name="coin" size={size} className={`drop-shadow-[0_0_6px_rgba(251,191,36,0.6)] ${className}`} />;
 }
 
 export function Coins({ value, plain = false }: { value: number; plain?: boolean }) {

@@ -1,7 +1,7 @@
 import { CONFIG } from '../engine/config';
 import type { AttemptResult, SkillId } from '../engine/types';
 import { useGame } from '../state/store';
-import { Button, Coins, CountUp, Screen, Stat } from './common';
+import { Button, Coins, CountUp, Screen, SkillIcon, Stat } from './common';
 
 function AttemptStats({ r }: { r: AttemptResult }) {
   const used = (Object.entries(r.skillsUsed) as [SkillId, number][]).filter(([, n]) => n > 0);
@@ -28,8 +28,12 @@ function AttemptStats({ r }: { r: AttemptResult }) {
       {used.length > 0 && (
         <div className="flex flex-wrap gap-2 text-sm">
           {used.map(([s, n]) => (
-            <span key={s} className="rounded-md bg-slate-900 px-2 py-1 ring-1" style={{ ['--tw-ring-color' as string]: CONFIG.skills[s].color }}>
-              {CONFIG.skills[s].icon} {s} ×{n}
+            <span
+              key={s}
+              className="flex items-center gap-1.5 rounded-xl bg-black/40 py-1 pl-1 pr-3 font-display font-bold"
+              style={{ color: CONFIG.skills[s].color, boxShadow: `0 0 0 1px ${CONFIG.skills[s].color}` }}
+            >
+              <SkillIcon id={s} size={26} /> {s} ×{n}
             </span>
           ))}
         </div>

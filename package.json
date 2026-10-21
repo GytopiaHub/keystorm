@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "typecheck": "tsc -b",
-    "words": "node scripts/build-words.mjs"
+    "words": "node scripts/build-words.mjs",
+    "art": "node scripts/build-art.mjs"
   },
   "dependencies": {
     "@fontsource/exo-2": "^5.3.0",
@@ -36,6 +37,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "happy-dom": "^21.0.4",
+    "sharp": "^0.35.5",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",

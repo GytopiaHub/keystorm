@@ -1,4 +1,5 @@
-import { CanvasTextMetrics, Container, Graphics, Sprite, Text, TextStyle, Texture } from 'pixi.js';
+import { Assets, CanvasTextMetrics, Container, Graphics, Sprite, Text, TextStyle, Texture, TilingSprite } from 'pixi.js';
+import { ART, iconUrl } from '../assets/art';
 import { CONFIG } from '../engine/config';
 import type { GameEngine } from '../engine/engine';
 import type { EngineEvent, SkillId, Word } from '../engine/types';
@@ -8,15 +9,26 @@ const W = FIELD.width;
 const H = FIELD.height;
 const WORD_H = FIELD.wordHeight;
 
-const EMOJI = '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji"';
 export const WORD_FONT = `"JetBrains Mono", "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace`;
-const DISPLAY_FONT = `"Exo 2", ${EMOJI}, sans-serif`;
+const DISPLAY_FONT = `"Exo 2", sans-serif`;
 
 const ROMAN = ['', 'I', 'II', 'III'];
 const COMBO_COLORS = [0x000000, 0x38bdf8, 0xd946ef, 0xf97316, 0xfacc15];
 
 const hex = (c: string) => parseInt(c.replace('#', ''), 16);
 const skillColor = (s: SkillId) => hex(CONFIG.skills[s].color);
+
+/** Textures are preloaded by FieldCanvas; this just looks them up. */
+const tex = (url: string): Texture => Assets.get<Texture>(url) ?? Texture.from(url);
+
+function iconSprite(name: string, size: number): Sprite {
+  const s = new Sprite(tex(iconUrl(name)));
+  s.anchor.set(0.5);
+  s.width = s.height = size;
+  return s;
+}
+
+const wordIcon = (w: Word) => (w.kind === 'coin' ? 'coin' : w.kind === 'black' ? 'storm' : CONFIG.skills[w.skill!].icon);
 
 const WEATHER_TINT: Record<SkillId, { color: number; alpha: number }> = {
   FIRE: { color: 0xff3b1f, alpha: 0.34 },
@@ -84,7 +96,7 @@ interface WordView {
   root: Container;
   halo: Graphics;
   bg: Graphics;
-  icon: Text | null;
+  icon: Sprite | null;
   typed: Text;
   rest: Text;
   key: string;
@@ -100,7 +112,7 @@ interface Dying {
 }
 
 interface Floater {
-  text: Text;
+  node: Container;
   life: number;
   max: number;
   vy: number;
@@ -159,8 +171,10 @@ function edgeGlow(clear: number): Sprite {
 export class FieldRenderer {
   readonly root = new Container();
   private stage = new Container();
-  private sky = new Graphics();
-  private clouds: Container[] = [];
+  private sky = new Sprite(tex(ART.sky));
+  private skyShade = new Graphics();
+  private clouds: TilingSprite[] = [];
+  private fireFrame = new Sprite(tex(ART.fire));
   private tint = new Graphics();
   private back = new Graphics();
   private water = new Graphics();
@@ -172,7 +186,7 @@ export class FieldRenderer {
   private vignette = edgeGlow(0.55);
   private dangerGlow = edgeGlow(0.7);
   private comboGlow = edgeGlow(0.85);
-  private frost = edgeGlow(0.6);
+  private frost = new Sprite(tex(ART.frost));
 
   private views = new Map<number, WordView>();
   private deaths = new Map<number, { mode: 'pop' | 'sink' }>();
@@ -208,7 +222,16 @@ export class FieldRenderer {
     this.vignette.alpha = 0.75;
     this.dangerGlow.tint = 0xff1a3c;
     this.comboGlow.alpha = 0;
-    this.frost.tint = 0xdff8ff;
+    // The frames are painted on black, so additive blending drops the black out.
+    for (const frame of [this.frost, this.fireFrame]) {
+      frame.width = W;
+      frame.height = H;
+      frame.blendMode = 'add';
+      frame.alpha = 0;
+    }
+    // Anchored at the bottom so the flames can flicker upward.
+    this.fireFrame.anchor.set(0, 1);
+    this.fireFrame.y = H;
     this.front.blendMode = 'add';
 
     this.dangerLabel = new Text({
@@ -218,7 +241,7 @@ export class FieldRenderer {
     this.dangerLabel.anchor.set(1, 1);
 
     this.root.addChild(this.stage);
-    this.stage.addChild(this.sky);
+    this.stage.addChild(this.sky, this.skyShade);
     this.buildClouds();
     this.stage.addChild(
       this.tint,
@@ -230,6 +253,7 @@ export class FieldRenderer {
       this.front,
       this.floatLayer,
       this.frost,
+      this.fireFrame,
       this.comboGlow,
       this.dangerGlow,
       this.vignette,
@@ -248,7 +272,8 @@ export class FieldRenderer {
   }
 
   destroy(): void {
-    const textures = [this.vignette, this.dangerGlow, this.comboGlow, this.frost].map((s) => s.texture);
+    // Art textures are shared across attempts; only the generated glows belong to this renderer.
+    const textures = [this.vignette, this.dangerGlow, this.comboGlow].map((s) => s.texture);
     this.root.destroy({ children: true });
     for (const t of textures) t.destroy(true);
   }
@@ -268,7 +293,7 @@ export class FieldRenderer {
           if (e.word.kind === 'coin') this.popup(`+${e.coins} coins`, e.word.x, cy + 18, 0xffd23f, 15, 0.08);
           if (this.pendingCharge) {
             const s = this.pendingCharge;
-            this.popup(`${CONFIG.skills[s].icon} +1 ${s}`, e.word.x, cy + 18, skillColor(s), 16, 0.08);
+            this.popup(`+1 ${s}`, e.word.x, cy + 18, skillColor(s), 16, 0.08, CONFIG.skills[s].icon);
             this.pendingCharge = null;
           }
           break;
@@ -292,7 +317,7 @@ export class FieldRenderer {
           const delay = e.via === 'GAMBLE' ? 0.9 : 0;
           this.weathers.push({ skill: e.skill, t: -delay, duration: Math.max(1.2, e.duration) });
           const def = CONFIG.skills[e.skill];
-          this.banner(`${def.icon} ${e.skill} ${ROMAN[e.tier]}`, hex(def.color), H * 0.38, 46, 1.2, delay);
+          this.banner(`${e.skill} ${ROMAN[e.tier]}`, hex(def.color), H * 0.38, 46, 1.2, delay, def.icon);
           if (e.skill === 'BOMB' && !delay) this.flash = 0.4;
           if (e.skill === 'FIRE' && !delay) this.shake = Math.max(this.shake, 6);
           break;
@@ -463,20 +488,7 @@ export class FieldRenderer {
     const typed = new Text({ text: '', style: this.textStyle.clone() });
     const rest = new Text({ text: '', style: this.textStyle.clone() });
     halo.blendMode = 'add';
-    let icon: Text | null = null;
-    if (w.kind !== 'normal') {
-      const glyph = w.kind === 'coin' ? '$' : w.kind === 'black' ? '⚡' : CONFIG.skills[w.skill!].icon;
-      icon = new Text({
-        text: glyph,
-        style: new TextStyle({
-          fontFamily: w.kind === 'coin' ? WORD_FONT : `${EMOJI}, sans-serif`,
-          fontSize: w.kind === 'coin' ? 17 : 14,
-          fontWeight: '800',
-          fill: w.kind === 'coin' ? 0x3a2c05 : 0xffffff,
-        }),
-      });
-      icon.anchor.set(0.5);
-    }
+    const icon = w.kind === 'normal' ? null : iconSprite(wordIcon(w), 38);
     root.addChild(halo, bg, typed, rest);
     if (icon) root.addChild(icon);
     return { root, halo, bg, icon, typed, rest, key: '', age: 0, width: 0 };
@@ -541,11 +553,8 @@ export class FieldRenderer {
 
     let x = FIELD.wordPadding / 2;
     if (view.icon) {
-      const cx = 14;
-      const color = w.kind === 'coin' ? 0xffd23f : w.kind === 'black' ? 0x2b3142 : p.stroke;
-      g.circle(cx, h / 2, 10.5).fill({ color });
-      g.circle(cx, h / 2, 10.5).stroke({ width: 1, color: 0xffffff, alpha: 0.5 });
-      view.icon.position.set(cx, h / 2);
+      // The icon pokes out past the badge's left edge, like a sticker.
+      view.icon.position.set(10, h / 2);
       x += 26;
     }
 
@@ -560,46 +569,59 @@ export class FieldRenderer {
 
   // ---- floating text --------------------------------------------------------------------
 
-  private popup(text: string, x: number, y: number, color: number, size: number, delay = 0): void {
-    const t = new Text({
-      text,
-      style: new TextStyle({
-        fontFamily: DISPLAY_FONT,
-        fontSize: size,
-        fontWeight: '900',
-        fill: color,
-        stroke: { color: 0x05070f, width: 4 },
-      }),
-    });
-    t.anchor.set(0.5);
-    t.position.set(x, y);
-    t.alpha = 0;
-    this.floatLayer.addChild(t);
-    this.floaters.push({ text: t, life: 0.9, max: 0.9, vy: this.reducedMotion ? 0 : -55, delay, banner: false });
+  /** A line of text with an optional icon in front, centred on its own origin. */
+  private label(text: string, style: TextStyle, icon?: string): Container {
+    const c = new Container();
+    const t = new Text({ text, style });
+    t.anchor.set(0, 0.5);
+    let x = 0;
+    if (icon) {
+      const size = Number(style.fontSize) * 1.35;
+      const sprite = iconSprite(icon, size);
+      sprite.position.set(size / 2, 0);
+      c.addChild(sprite);
+      x = size + Number(style.fontSize) * 0.25;
+    }
+    t.position.set(x, 0);
+    c.addChild(t);
+    c.pivot.set((x + t.width) / 2, 0);
+    return c;
   }
 
-  private banner(text: string, color: number, y: number, size: number, life: number, delay = 0): void {
-    const t = new Text({
-      text,
-      style: new TextStyle({
-        fontFamily: DISPLAY_FONT,
-        fontSize: size,
-        fontWeight: '900',
-        fill: color,
-        letterSpacing: 4,
-        stroke: { color: 0x05070f, width: 6 },
-        dropShadow: { color, blur: 18, distance: 0, alpha: 0.9 },
-      }),
+  private popup(text: string, x: number, y: number, color: number, size: number, delay = 0, icon?: string): void {
+    const style = new TextStyle({
+      fontFamily: DISPLAY_FONT,
+      fontSize: size,
+      fontWeight: '900',
+      fill: color,
+      stroke: { color: 0x05070f, width: 4 },
     });
-    t.anchor.set(0.5);
-    t.position.set(W / 2, y);
-    t.alpha = 0;
-    this.floatLayer.addChild(t);
+    const node = this.label(text, style, icon);
+    node.position.set(x, y);
+    node.alpha = 0;
+    this.floatLayer.addChild(node);
+    this.floaters.push({ node, life: 0.9, max: 0.9, vy: this.reducedMotion ? 0 : -55, delay, banner: false });
+  }
+
+  private banner(text: string, color: number, y: number, size: number, life: number, delay = 0, icon?: string): void {
+    const style = new TextStyle({
+      fontFamily: DISPLAY_FONT,
+      fontSize: size,
+      fontWeight: '900',
+      fill: color,
+      letterSpacing: 4,
+      stroke: { color: 0x05070f, width: 6 },
+      dropShadow: { color, blur: 18, distance: 0, alpha: 0.9 },
+    });
+    const node = this.label(text, style, icon);
+    node.position.set(W / 2, y);
+    node.alpha = 0;
+    this.floatLayer.addChild(node);
     // Only one banner at a time: a new one hurries any showing banner off screen.
     if (!delay) {
       for (const f of this.floaters) if (f.banner && f.delay <= 0) f.life = Math.min(f.life, 0.15);
     }
-    this.floaters.push({ text: t, life, max: life, vy: 0, delay, banner: true });
+    this.floaters.push({ node, life, max: life, vy: 0, delay, banner: true });
   }
 
   private updateFloaters(dt: number): void {
@@ -613,15 +635,15 @@ export class FieldRenderer {
       if (f.banner) {
         const k = Math.min(1, age / 0.18);
         // Slams in from large, then holds.
-        f.text.scale.set(this.reducedMotion ? 1 : 1 + 0.8 * (1 - k) ** 3);
-        f.text.alpha = Math.min(1, age / 0.08, f.life / 0.35);
+        f.node.scale.set(this.reducedMotion ? 1 : 1 + 0.8 * (1 - k) ** 3);
+        f.node.alpha = Math.min(1, age / 0.08, f.life / 0.35);
       } else {
-        f.text.y += f.vy * dt;
-        f.text.alpha = Math.min(1, age / 0.06, f.life / 0.4);
-        if (!this.reducedMotion) f.text.scale.set(1 + 0.4 * Math.max(0, 1 - age / 0.12));
+        f.node.y += f.vy * dt;
+        f.node.alpha = Math.min(1, age / 0.06, f.life / 0.4);
+        if (!this.reducedMotion) f.node.scale.set(1 + 0.4 * Math.max(0, 1 - age / 0.12));
       }
     }
-    for (const f of this.floaters.filter((f) => f.life <= 0)) f.text.destroy();
+    for (const f of this.floaters.filter((f) => f.life <= 0)) f.node.destroy({ children: true });
     this.floaters = this.floaters.filter((f) => f.life > 0);
   }
 
@@ -683,44 +705,39 @@ export class FieldRenderer {
   // ---- background, weather and particles ------------------------------------------------
 
   private drawSky(): void {
-    const g = this.sky;
-    const bands = 40;
-    for (let i = 0; i < bands; i++) {
-      const k = i / bands;
-      const c = k < 0.5 ? lerpColor(0x04060d, 0x101633, k * 2) : lerpColor(0x101633, 0x18264d, (k - 0.5) * 2);
-      g.rect(0, (i * H) / bands, W, H / bands + 1).fill({ color: c });
-    }
-    // A faint horizon glow behind the water.
-    for (let i = 0; i < 8; i++) g.ellipse(W / 2, H, W * (0.6 - i * 0.05), 160 - i * 15).fill({ color: 0x2a5bd7, alpha: 0.03 });
+    this.sky.width = W;
+    this.sky.height = H;
+    // Knock the painting back so white words stay the brightest thing on screen.
+    this.skyShade.rect(0, 0, W, H).fill({ color: 0x03050c, alpha: 0.38 });
   }
 
+  private static CLOUD_LAYERS = [
+    { height: 230, color: 0x46507e, alpha: 0.45, speed: 6 },
+    { height: 190, color: 0x232b52, alpha: 0.72, speed: 11 },
+    { height: 150, color: 0x0d1230, alpha: 0.92, speed: 18 },
+  ];
+
   private buildClouds(): void {
-    const layers = [
-      { color: 0x161c33, y: 20, alpha: 0.9, count: 9, size: 110 },
-      { color: 0x0e1326, y: 8, alpha: 0.95, count: 11, size: 90 },
-      { color: 0x080b18, y: -6, alpha: 1, count: 13, size: 70 },
-    ];
-    for (const l of layers) {
-      const c = new Container();
-      const g = new Graphics();
-      for (let i = 0; i < l.count * 2; i++) {
-        const x = (i / l.count) * W + ((i * 53) % 40);
-        const r = l.size * (0.7 + ((i * 37) % 10) / 20);
-        g.ellipse(x, l.y + ((i * 29) % 18), r, r * 0.38).fill({ color: l.color, alpha: l.alpha });
-      }
-      c.addChild(g);
+    FieldRenderer.CLOUD_LAYERS.forEach((l, i) => {
+      const texture = tex(ART.clouds[i]);
+      const c = new TilingSprite({ texture, width: W, height: l.height });
+      c.tileScale.set(l.height / texture.height);
+      c.tilePosition.x = -i * 300;
+      c.tint = l.color;
+      c.alpha = l.alpha;
       this.clouds.push(c);
       this.stage.addChild(c);
-    }
+    });
   }
 
   private moveClouds(dt: number): void {
-    const speeds = [5, 9, 15];
     const wind = this.weathers.some((w) => w.skill === 'WIND') ? 12 : 1;
+    // Lightning lights the clouds from inside.
+    const lit = Math.min(1, this.flash * 1.6);
     this.clouds.forEach((c, i) => {
-      if (this.reducedMotion) return;
-      c.x -= speeds[i] * wind * dt;
-      if (c.x < -W) c.x += W;
+      const l = FieldRenderer.CLOUD_LAYERS[i];
+      if (!this.reducedMotion) c.tilePosition.x -= l.speed * wind * dt;
+      c.tint = lerpColor(l.color, 0xc9d3ff, lit * (0.9 - i * 0.2));
     });
   }
 
@@ -981,7 +998,13 @@ export class FieldRenderer {
     const o = this.overlay;
     o.clear();
 
-    this.frost.alpha = engine.effects.ICE ? 0.9 * this.strength(engine, 'ICE') : 0;
+    this.frost.alpha = engine.effects.ICE ? this.strength(engine, 'ICE') : 0;
+
+    // Flames rise during FIRE, and smoulder at the edges while the combo is maxed out.
+    const fire = Math.max(this.strength(engine, 'FIRE'), engine.multiplier >= 3 ? 0.25 : 0);
+    const flicker = this.reducedMotion ? 1 : 0.85 + 0.15 * Math.sin(this.time * 17) * Math.sin(this.time * 7.3);
+    this.fireFrame.alpha = fire * flicker;
+    this.fireFrame.height = H * (this.reducedMotion ? 1 : 1 + 0.04 * Math.sin(this.time * 11));
 
     const tierIdx = CONFIG.gameplay.combo.tiers.findIndex((t) => t.multiplier === engine.multiplier);
     if (tierIdx > 0) {
