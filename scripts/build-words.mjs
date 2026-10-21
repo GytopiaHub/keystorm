@@ -1,11 +1,11 @@
-// Builds src/data/words.json from data-src/words-*.txt.
+// Builds src/data/words.json from data/words-*.txt.
 // Dedupes, drops blocklisted words and skill names, and buckets by length.
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const srcDir = join(root, 'data-src');
+const srcDir = join(root, 'data');
 
 const tokens = (text) =>
   text

@@ -34,7 +34,8 @@ export interface GameStore {
   /** Level the shop's play button starts. */
   nextLevel: number;
   toast: Toast | null;
-  comboFlash: { id: number; multiplier: number } | null;
+  /** Feedback on the input box after each submit. */
+  inputPulse: { id: number; kind: 'hit' | 'miss' } | null;
 
   startLevel: (level: number) => void;
   pause: () => void;
@@ -51,7 +52,7 @@ export interface GameStore {
   setHud: (hud: HudSnapshot) => void;
   setBuffer: (buffer: string) => void;
   showToast: (text: string, tone?: Toast['tone']) => void;
-  flashCombo: (multiplier: number) => void;
+  pulseInput: (kind: 'hit' | 'miss') => void;
 }
 
 let seq = 0;
@@ -88,7 +89,7 @@ export const useGame = create<GameStore>((set, get) => {
     lastResult: null,
     nextLevel: 1,
     toast: null,
-    comboFlash: null,
+    inputPulse: null,
 
     startLevel: (level) => {
       const engine = newEngine(level);
@@ -100,7 +101,6 @@ export const useGame = create<GameStore>((set, get) => {
         buffer: '',
         lastResult: null,
         toast: null,
-        comboFlash: null,
       });
     },
 
@@ -179,6 +179,6 @@ export const useGame = create<GameStore>((set, get) => {
     setHud: (hud) => set({ hud }),
     setBuffer: (buffer) => set({ buffer }),
     showToast: (text, tone = 'info') => set({ toast: { id: ++seq, text, tone } }),
-    flashCombo: (multiplier) => set({ comboFlash: { id: ++seq, multiplier } }),
+    pulseInput: (kind) => set({ inputPulse: { id: ++seq, kind } }),
   };
 });

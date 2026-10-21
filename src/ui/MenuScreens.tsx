@@ -2,26 +2,28 @@ import { useState } from 'react';
 import { CONFIG } from '../engine/config';
 import type { Difficulty, WordListId } from '../engine/types';
 import { useGame } from '../state/store';
-import { Button, Coins, Screen, Stat } from './common';
+import { Button, Coins, Screen, Stat, StormBackdrop } from './common';
 
 export function MainMenu() {
   const progress = useGame((s) => s.progress);
   const { startLevel, goTo, openShop } = useGame.getState();
   return (
-    <div className="storm-bg flex min-h-screen items-center justify-center p-4">
-      <div className="flex w-full max-w-md flex-col items-center gap-6 rounded-3xl bg-slate-950/75 px-8 py-10 shadow-2xl ring-1 ring-slate-700/60 backdrop-blur">
+    <StormBackdrop className="flex items-center justify-center p-4">
+      <div className="screen-in flex w-full max-w-md flex-col items-center gap-7">
         <div className="text-center">
-          <h1 className="title-glow text-5xl font-black tracking-[0.15em] sm:text-6xl text-cyan-100">KEYSTORM</h1>
-          <p className="mt-2 text-sm text-slate-400">Type the falling words before the flood rises.</p>
+          <h1 className="title-storm text-5xl tracking-[0.14em] sm:text-7xl">KEYSTORM</h1>
+          <p className="mt-3 text-xs uppercase tracking-[0.35em] text-cyan-200/70">Type before the flood rises</p>
         </div>
-        <div className="flex items-center gap-6 text-sm text-slate-300">
-          <span>
-            Level <span className="text-xl font-bold text-white tabular-nums">{progress.currentLevel}</span>
+        <div className="glass flex items-center gap-6 rounded-full px-5 py-2 text-sm text-slate-300">
+          <span className="flex items-baseline gap-2">
+            <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Level</span>
+            <span className="font-display text-xl font-bold text-white tabular-nums">{progress.currentLevel}</span>
           </span>
+          <span className="h-5 w-px bg-white/15" />
           <Coins value={progress.coins} />
         </div>
-        <div className="flex w-full flex-col gap-2.5">
-          <Button variant="primary" className="py-3 text-lg" autoFocus onClick={() => startLevel(progress.currentLevel)}>
+        <div className="glass stagger flex w-full flex-col gap-2.5 rounded-3xl p-5">
+          <Button variant="primary" className="py-3.5 font-display text-lg tracking-widest" autoFocus onClick={() => startLevel(progress.currentLevel)}>
             Play level {progress.currentLevel}
           </Button>
           <Button onClick={() => goTo('levelSelect')}>Level select</Button>
@@ -31,7 +33,7 @@ export function MainMenu() {
             <Button onClick={() => goTo('settings')}>Settings</Button>
           </div>
         </div>
-        <details className="w-full text-sm text-slate-400">
+        <details className="glass w-full rounded-2xl px-5 py-3 text-sm text-slate-400">
           <summary className="cursor-pointer select-none text-slate-300">How to play</summary>
           <ul className="mt-2 list-disc space-y-1 pl-5">
             <li>Type a falling word and press Space or Enter to clear it.</li>
@@ -43,7 +45,7 @@ export function MainMenu() {
           </ul>
         </details>
       </div>
-    </div>
+    </StormBackdrop>
   );
 }
 

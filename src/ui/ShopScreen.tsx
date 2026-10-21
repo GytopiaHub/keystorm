@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { CONFIG, skillPrice, upgradePrice } from '../engine/config';
 import type { SkillId, UpgradeId } from '../engine/types';
 import { useGame } from '../state/store';
@@ -59,7 +59,10 @@ function SkillsTab() {
       </p>
       {CONFIG.skillCategories.map((cat) => (
         <section key={cat.id}>
-          <h2 className="mb-2 text-sm font-bold uppercase tracking-widest text-slate-400">{cat.label}</h2>
+          <h2 className="mb-3 flex items-center gap-3 text-xs font-bold uppercase tracking-[0.25em] text-slate-400">
+            {cat.label}
+            <span className="h-px flex-1 bg-gradient-to-r from-white/15 to-transparent" />
+          </h2>
           <div className="grid gap-3 sm:grid-cols-2">
             {CONFIG.skillOrder
               .filter((s) => CONFIG.skills[s].category === cat.id)
@@ -77,29 +80,44 @@ function SkillCard({ id }: { id: SkillId }) {
   const tier = useGame((s) => s.progress.skills[id]);
   const coins = useGame((s) => s.progress.coins);
   const buy = useGame((s) => s.buySkill);
+  const [bought, setBought] = useState(0);
   const def = CONFIG.skills[id];
   const price = skillPrice(tier);
   const current = tier > 0 ? def.tiers[tier - 1].label : null;
   const next = price !== null ? def.tiers[tier].label : null;
   return (
-    <div className="flex flex-col gap-2 rounded-xl bg-slate-900/80 p-4 ring-1 ring-slate-800" data-testid={`skill-${id}`}>
+    <div
+      key={bought}
+      className={`skill-card flex flex-col gap-2 rounded-2xl bg-white/[0.03] p-4 ${bought ? 'just-bought' : ''}`}
+      style={{ '--c': def.color } as CSSProperties}
+      data-testid={`skill-${id}`}
+    >
       <div className="flex items-center gap-3">
         <span
           aria-hidden
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-lg ring-2"
-          style={{ background: `${def.color}26`, ['--tw-ring-color' as string]: def.color }}
+          className="flex h-10 w-10 items-center justify-center rounded-xl text-xl"
+          style={{ background: `${def.color}26`, boxShadow: `0 0 0 2px ${def.color}, 0 0 18px -2px ${def.color}` }}
         >
           {def.icon}
         </span>
         <div className="flex-1">
-          <div className="font-black tracking-wider" style={{ color: def.color }}>
+          <div className="font-display font-black tracking-wider" style={{ color: def.color, textShadow: `0 0 12px ${def.color}88` }}>
             {id}
           </div>
           <div className="text-xs text-slate-400">{def.description}</div>
         </div>
-        <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${tier ? 'bg-slate-700 text-white' : 'bg-slate-800 text-slate-500'}`}>
-          {tier ? `Tier ${ROMAN[tier]}` : 'Locked'}
-        </span>
+        <div className="flex flex-col items-end gap-1">
+          <span className={`text-xs font-bold ${tier ? 'text-white' : 'text-slate-500'}`}>{tier ? `Tier ${ROMAN[tier]}` : 'Locked'}</span>
+          <div className="flex gap-1" aria-hidden>
+            {[1, 2, 3].map((t) => (
+              <span
+                key={t}
+                className="h-1.5 w-4 rounded-full"
+                style={t <= tier ? { background: def.color, boxShadow: `0 0 6px ${def.color}` } : { background: 'rgba(255,255,255,0.12)' }}
+              />
+            ))}
+          </div>
+        </div>
       </div>
       <div className="text-sm">
         {current && (
@@ -118,7 +136,10 @@ function SkillCard({ id }: { id: SkillId }) {
       <Button
         variant={price !== null && coins >= price ? 'primary' : 'secondary'}
         disabled={price === null || coins < price}
-        onClick={() => buy(id)}
+        onClick={() => {
+          buy(id);
+          setBought((n) => n + 1);
+        }}
         className="mt-auto"
       >
         {price === null ? (
@@ -147,19 +168,25 @@ function UpgradeCard({ id }: { id: UpgradeId }) {
   const rank = useGame((s) => s.progress.upgrades[id]);
   const coins = useGame((s) => s.progress.coins);
   const buy = useGame((s) => s.buyUpgrade);
+  const [bought, setBought] = useState(0);
   const def = CONFIG.upgrades[id];
   const price = upgradePrice(id, rank);
   return (
-    <div className="flex flex-col gap-2 rounded-xl bg-slate-900/80 p-4 ring-1 ring-slate-800" data-testid={`upgrade-${id}`}>
+    <div
+      key={bought}
+      className={`skill-card flex flex-col gap-2 rounded-2xl bg-white/[0.03] p-4 ${bought ? 'just-bought' : ''}`}
+      style={{ '--c': '#38bdf8' } as CSSProperties}
+      data-testid={`upgrade-${id}`}
+    >
       <div className="flex items-center justify-between">
-        <div className="font-bold">{def.name}</div>
+        <div className="font-display font-bold tracking-wide">{def.name}</div>
         <span className="text-xs font-bold tabular-nums text-slate-300">
           Rank {rank}/{def.maxRank}
         </span>
       </div>
       <div className="flex gap-1">
         {Array.from({ length: def.maxRank }, (_, i) => (
-          <div key={i} className={`h-1.5 flex-1 rounded-full ${i < rank ? 'bg-cyan-400' : 'bg-slate-700'}`} />
+          <div key={i} className={`h-1.5 flex-1 rounded-full ${i < rank ? 'bg-cyan-400 shadow-[0_0_6px_#22d3ee]' : 'bg-white/10'}`} />
         ))}
       </div>
       <div className="text-sm text-slate-300">
@@ -169,7 +196,10 @@ function UpgradeCard({ id }: { id: UpgradeId }) {
       <Button
         variant={price !== null && coins >= price ? 'primary' : 'secondary'}
         disabled={price === null || coins < price}
-        onClick={() => buy(id)}
+        onClick={() => {
+          buy(id);
+          setBought((n) => n + 1);
+        }}
         className="mt-auto"
       >
         {price === null ? (

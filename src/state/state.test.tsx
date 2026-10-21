@@ -88,8 +88,9 @@ describe('shop UI', () => {
   it('disables what the player cannot afford and buys what they can', () => {
     useGame.setState({ progress: { ...defaultProgress(), coins: 40 } });
     render(<ShopScreen />);
+    fireEvent.click(within(screen.getByTestId('skill-FIRE')).getByRole('button', { name: /Unlock/ }));
+    // The card remounts after a purchase to play its flash, so query it again.
     const fire = within(screen.getByTestId('skill-FIRE'));
-    fireEvent.click(fire.getByRole('button', { name: /Unlock/ }));
     expect(fire.getByText('Tier I')).toBeInTheDocument();
     expect(fire.getByRole('button', { name: /Upgrade/ })).toBeDisabled();
     expect(within(screen.getByTestId('skill-ICE')).getByRole('button', { name: /Unlock/ })).toBeDisabled();

@@ -10,7 +10,7 @@ export default defineConfig({
     globals: true,
     // Threads start faster than forks on slow (e.g. WSL-mounted) filesystems.
     pool: 'threads',
-    environment: 'jsdom',
+    environment: 'happy-dom',
     include: ['src/**/*.test.{ts,tsx}'],
     setupFiles: ['src/test/setup.ts'],
   },
