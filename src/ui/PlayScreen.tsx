@@ -26,7 +26,9 @@ export function PlayScreen() {
   const onFrame = useCallback((dt: number): EngineEvent[] => {
     const s = useGame.getState();
     const eng = s.engine;
-    if (!eng) return [];
+    // After a restart the old canvas ticks a little longer while it unmounts. It must not
+    // advance the new engine, or that engine starts before its field is fitted to the screen.
+    if (!eng || eng !== engine) return [];
     if (s.screen === 'playing') eng.advance(dt);
     const events = eng.drainEvents();
     if (events.length) reactTo(events);
@@ -48,7 +50,7 @@ export function PlayScreen() {
       }
     }
     return events;
-  }, []);
+  }, [engine]);
 
   useKeyboard();
   useAutoPause();
