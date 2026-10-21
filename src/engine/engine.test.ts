@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG, comboMultiplier, levelParams } from './config';
 import { GameEngine, type EngineOptions } from './engine';
-import { SKILL_IDS, type SkillId } from './types';
+import { SKILL_BEHAVIOURS } from './skills';
+import { SKILL_IDS, UPGRADE_IDS, type SkillId } from './types';
 import { WordBank } from './words';
 import { emptySkills, emptyUpgrades } from '../state/progress';
 import wordsJson from '../data/words.json';
@@ -38,15 +39,16 @@ describe('word data', () => {
 describe('level config', () => {
   it('uses the table for level 1', () => {
     const p = levelParams(1);
-    expect(p).toMatchObject({ quota: 500, fallSpeed: 40, spawnInterval: 2, wordLengthRange: [3, 5] });
+    expect(p).toMatchObject(CONFIG.levels[0]);
   });
 
   it('extrapolates beyond the table and respects caps', () => {
-    const p10 = levelParams(10);
-    const p11 = levelParams(11);
-    expect(p11.quota).toBeGreaterThan(p10.quota);
-    expect(p11.fallSpeed).toBeGreaterThan(p10.fallSpeed);
-    expect(p11.spawnInterval).toBeLessThan(p10.spawnInterval);
+    const last = CONFIG.levels.length;
+    const a = levelParams(last);
+    const b = levelParams(last + 1);
+    expect(b.quota).toBeGreaterThan(a.quota);
+    expect(b.fallSpeed).toBeGreaterThan(a.fallSpeed);
+    expect(b.spawnInterval).toBeLessThan(a.spawnInterval);
     const far = levelParams(500);
     expect(far.fallSpeed).toBe(CONFIG.gameplay.caps.maxFallSpeed);
     expect(far.spawnInterval).toBe(CONFIG.gameplay.caps.minSpawnInterval);
@@ -90,7 +92,7 @@ describe('spawning and movement', () => {
     for (let i = 0; i < 120 * 30; i++) e.step(GameEngine.STEP);
     expect(e.words.length + e.pile.length).toBeGreaterThan(0);
     for (const w of e.words) expect(w.text.length).toBeGreaterThanOrEqual(3);
-    for (const w of e.words) expect(w.text.length).toBeLessThanOrEqual(5);
+    for (const w of e.words) expect(w.text.length).toBeLessThanOrEqual(CONFIG.levels[0].wordLengthRange[1]);
   });
 
   it('moves the same distance regardless of frame rate', () => {
@@ -101,7 +103,7 @@ describe('spawning and movement', () => {
     for (let i = 0; i < 60; i++) a.advance(1 / 60);
     for (let i = 0; i < 144; i++) b.advance(1 / 144);
     expect(wa.y).toBeCloseTo(wb.y, 0);
-    expect(wa.y).toBeCloseTo(40, 0);
+    expect(wa.y).toBeCloseTo(CONFIG.levels[0].fallSpeed, 0);
   });
 });
 
@@ -213,23 +215,26 @@ describe('pile and failure', () => {
     expect(e.status).toBe('failed');
   });
 
-  it('reinforced floor raises the danger line', () => {
-    expect(quiet({ upgrades: { ...emptyUpgrades(), reinforcedFloor: 2 } }).dangerRows).toBe(
-      CONFIG.gameplay.field.baseDangerRows + 2,
-    );
+  it('reinforced floor fits more rows under the same danger line', () => {
+    const base = quiet();
+    const e = quiet({ upgrades: { ...emptyUpgrades(), reinforcedFloor: 2 } });
+    const perRank = CONFIG.upgrades.reinforcedFloor.perRank;
+    expect(e.dangerRows).toBe(CONFIG.gameplay.field.baseDangerRows + 2 * perRank);
+    expect(e.dangerY).toBe(base.dangerY);
+    expect(e.rowHeight * e.dangerRows).toBeCloseTo(base.rowHeight * base.dangerRows);
   });
 });
 
 describe('level completion and coins', () => {
   it('completes at quota, clears remaining words without score and grants rewards', () => {
     const e = quiet();
-    e.score = 490;
+    e.score = e.params.quota - 10;
     e.addWord('rain');
     e.addWord('hail');
     type(e, 'rain');
     expect(e.status).toBe('complete');
     expect(e.words).toHaveLength(0);
-    expect(e.score).toBe(530);
+    expect(e.score).toBe(e.params.quota + 30);
     const r = e.result();
     expect(r.passed).toBe(true);
     expect(r.perfect).toBe(true);
@@ -240,28 +245,77 @@ describe('level completion and coins', () => {
 
   it('withholds the perfect reward after a mistake', () => {
     const e = quiet();
-    e.score = 490;
+    e.score = e.params.quota - 10;
     type(e, 'nope');
-    e.score = 490;
+    e.score = e.params.quota - 10;
     e.addWord('rain');
     type(e, 'rain');
     expect(e.result().coins.perfect).toBe(0);
   });
 
   it('coin words grant a bonus and coin bonus scales coins', () => {
-    const e = quiet({ upgrades: { ...emptyUpgrades(), coinBonus: 5 } });
+    const e = quiet({ upgrades: { ...emptyUpgrades(), coinBonus: 2 } });
+    const m = 1 + 2 * CONFIG.upgrades.coinBonus.perRank;
     e.addWord('gold', { kind: 'coin' });
     type(e, 'gold');
-    expect(e.coins.words + e.coins.coinWords).toBe(Math.round(1 * 1.5) + Math.round(5 * 1.5));
+    const c = CONFIG.gameplay.coins;
+    expect(e.coins.words + e.coins.coinWords).toBe(Math.round(c.perWord * m) + Math.round(c.coinWordBonus * m));
+  });
+});
+
+describe('skill and upgrade definitions', () => {
+  it('every skill has data, a behaviour, valid tiers and a price per tier', () => {
+    for (const id of SKILL_IDS) {
+      const def = CONFIG.skills[id];
+      expect(def, id).toBeDefined();
+      expect(SKILL_BEHAVIOURS[id], id).toBeDefined();
+      expect(def.prices).toHaveLength(def.tiers.length);
+      expect(def.unlockLevel).toBeGreaterThanOrEqual(1);
+      const timed = !!SKILL_BEHAVIOURS[id].timed;
+      for (const t of def.tiers) if (timed) expect(t.duration, id).toBeGreaterThan(0);
+    }
+  });
+
+  it('every upgrade has data with a price per rank', () => {
+    for (const id of UPGRADE_IDS) {
+      const def = CONFIG.upgrades[id];
+      expect(def, id).toBeDefined();
+      expect(def.prices).toHaveLength(def.maxRank);
+      expect(def.unlockLevel).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('each tier and rank is stronger and costs more than the last', () => {
+    for (const id of SKILL_IDS) {
+      const { prices, tiers } = CONFIG.skills[id];
+      for (let i = 1; i < prices.length; i++) expect(prices[i], id).toBeGreaterThan(prices[i - 1]);
+      for (let i = 1; i < tiers.length; i++) {
+        const [a, b] = [tiers[i - 1], tiers[i]];
+        if (a.count !== undefined) expect(b.count!).toBeGreaterThan(a.count);
+        if (a.duration !== undefined) expect(b.duration!).toBeGreaterThan(a.duration);
+        if (a.speed !== undefined) expect(b.speed!).toBeLessThan(a.speed);
+        if (a.rows !== undefined) expect(b.rows!).toBeGreaterThan(a.rows);
+      }
+    }
+    for (const id of UPGRADE_IDS) {
+      const { prices } = CONFIG.upgrades[id];
+      for (let i = 1; i < prices.length; i++) expect(prices[i], id).toBeGreaterThan(prices[i - 1]);
+    }
   });
 });
 
 describe('skills and the charge pool', () => {
   it('charge words add to the pool up to capacity', () => {
     const e = quiet({ skills: withSkill('FIRE') });
-    for (let i = 0; i < 7; i++) e.addWord(`c${'a'.repeat(i + 2)}`, { kind: 'charge', skill: 'FIRE' });
-    for (let i = 0; i < 7; i++) type(e, `c${'a'.repeat(i + 2)}`);
-    expect(e.pool).toHaveLength(5);
+    for (let i = 0; i < 4; i++) e.addWord(`c${'a'.repeat(i + 2)}`, { kind: 'charge', skill: 'FIRE' });
+    for (let i = 0; i < 4; i++) type(e, `c${'a'.repeat(i + 2)}`);
+    expect(e.pool).toHaveLength(CONFIG.gameplay.chargePool.baseCapacity);
+    expect(e.drainEvents().some((ev) => ev.type === 'poolFull')).toBe(true);
+  });
+
+  it('charge capacity adds slots', () => {
+    const e = quiet({ upgrades: { ...emptyUpgrades(), chargeCapacity: 2 } });
+    expect(e.capacity).toBe(CONFIG.gameplay.chargePool.baseCapacity + 2 * CONFIG.upgrades.chargeCapacity.perRank);
   });
 
   it('typing a skill without a charge is not a mistake', () => {
@@ -275,134 +329,63 @@ describe('skills and the charge pool', () => {
   });
 
   it('firing a skill spends a charge and does not touch the combo', () => {
-    const e = quiet({ skills: withSkill('FIRE') });
-    e.pool = ['FIRE'];
-    for (const w of ['one', 'two', 'six', 'ten']) e.addWord(w, { y: w.length * 10 + (w === 'ten' ? 5 : 0) });
+    const e = quiet({ skills: withSkill('ICE') });
+    e.pool = ['ICE'];
     e.combo = 3;
-    type(e, 'fire');
+    type(e, 'ice');
     expect(e.pool).toHaveLength(0);
-    expect(e.words.map((w) => w.text)).toHaveLength(1);
+    expect(e.effects.ICE).toBeDefined();
     expect(e.combo).toBe(3);
   });
 
-  it('FIRE tier III clears everything', () => {
+  it('FIRE burns the lowest words; burnt words give coins but no score', () => {
     const e = quiet();
-    for (const w of ['one', 'two', 'six']) e.addWord(w);
-    e.fire('FIRE', 3);
-    expect(e.words).toHaveLength(0);
+    e.addWord('top', { y: 10 });
+    e.addWord('mid', { y: 100 });
+    e.addWord('low', { y: 200 });
+    e.fire('FIRE', 1); // Tier I burns 2
+    expect(e.words.map((w) => w.text)).toEqual(['top']);
+    expect(e.score).toBe(0);
+    expect(e.coins.words).toBeGreaterThan(0);
   });
 
-  it('BOMB clears neighbours of the next typed word', () => {
-    const e = quiet();
-    e.addWord('aim', { x: 300, y: 100 });
-    e.addWord('near', { x: 360, y: 100 });
-    e.addWord('far', { x: 800, y: 100 });
-    e.fire('BOMB', 1);
-    type(e, 'aim');
-    expect(e.words.map((w) => w.text)).toEqual(['far']);
-  });
-
-  it('CHAIN clears words with the same first letter', () => {
-    const e = quiet();
-    for (const w of ['sun', 'sea', 'sky', 'mud']) e.addWord(w);
-    e.fire('CHAIN', 1);
-    type(e, 'sun');
-    expect(e.words.map((w) => w.text)).toEqual(['mud']);
-  });
-
-  it('ICE freezes words; timed effects reset instead of stacking', () => {
+  it('ICE freezes words and spawning; firing again resets instead of stacking', () => {
     const e = quiet();
     const w = e.addWord('cold', { y: 50 });
     e.fire('ICE', 1);
     for (let i = 0; i < 120; i++) e.step(GameEngine.STEP);
     expect(w.y).toBe(50);
     e.fire('ICE', 1);
-    expect(e.effects.ICE!.remaining).toBe(2);
-    for (let i = 0; i < 360; i++) e.step(GameEngine.STEP);
+    expect(e.effects.ICE!.remaining).toBe(CONFIG.skills.ICE.tiers[0].duration);
+    for (let i = 0; i < 120 * 10; i++) e.step(GameEngine.STEP);
     expect(e.effects.ICE).toBeUndefined();
     expect(w.y).toBeGreaterThan(50);
   });
 
-  it('SLOW and OVERDRIVE change speed; OVERDRIVE multiplies score', () => {
+  it('SLOW scales fall speed by its tier factor', () => {
+    const base = quiet();
     const slow = quiet();
-    const ws = slow.addWord('aaa');
+    const a = base.addWord('aaa');
+    const b = slow.addWord('aaa');
     slow.fire('SLOW', 2);
-    for (let i = 0; i < 120; i++) slow.step(GameEngine.STEP);
-    expect(ws.y).toBeCloseTo(20, 0);
-
-    const od = quiet();
-    od.addWord('aaa');
-    od.fire('OVERDRIVE', 1);
-    type(od, 'aaa');
-    expect(od.score).toBe(60);
+    for (let i = 0; i < 120; i++) {
+      base.step(GameEngine.STEP);
+      slow.step(GameEngine.STEP);
+    }
+    expect(b.y).toBeCloseTo(a.y * CONFIG.skills.SLOW.tiers[1].speed!, 1);
   });
 
-  it('REWIND, SHRINK, WIND and SHIELD', () => {
+  it('WIND removes pile rows and pushes falling words up', () => {
     const e = quiet();
-    const w = e.addWord('thunder', { y: 300 });
-    e.fire('REWIND', 1);
-    expect(w.y).toBeCloseTo(300 - 0.25 * CONFIG.gameplay.field.height);
-    e.fire('SHRINK', 2);
-    expect(w.text).toBe('thu');
-    type(e, 'thu');
-    expect(e.words).toHaveLength(0);
-
-    e.pile = [
-      { text: 'a', kind: 'normal' },
-      { text: 'b', kind: 'normal' },
-      { text: 'c', kind: 'normal' },
-    ];
-    e.fire('WIND', 2);
-    expect(e.pile).toHaveLength(1);
-
-    e.fire('SHIELD', 1);
-    e.addWord('drop', { y: e.landingY });
-    e.step(GameEngine.STEP);
-    expect(e.pile).toHaveLength(1);
-    e.addWord('drip', { y: e.landingY });
-    e.step(GameEngine.STEP);
-    expect(e.pile).toHaveLength(2);
+    e.pile = Array.from({ length: 6 }, (_, i) => ({ text: `r${i}`, kind: 'normal' as const }));
+    const w = e.addWord('gust', { y: 300 });
+    e.fire('WIND', 1);
+    const t = CONFIG.skills.WIND.tiers[0];
+    expect(e.pile).toHaveLength(6 - t.rows!);
+    expect(w.y).toBeCloseTo(300 - t.push! * e.field.height);
   });
 
-  it('DOUBLE doubles score and coins for N words', () => {
-    const e = quiet();
-    e.fire('DOUBLE', 1);
-    for (const w of ['aaa', 'bbb']) e.addWord(w);
-    type(e, 'aaa');
-    expect(e.score).toBe(60);
-    expect(e.doubleLeft).toBe(4);
-    expect(e.coins.words).toBe(2);
-  });
-
-  it('MAGNET pulls coin words down and holds them above the pile', () => {
-    const e = quiet();
-    const coin = e.addWord('gold', { kind: 'coin', y: 0 });
-    e.fire('MAGNET', 1);
-    for (let i = 0; i < 120 * 4; i++) e.step(GameEngine.STEP);
-    const target = e.landingY - 2 * CONFIG.gameplay.field.rowHeight - CONFIG.gameplay.field.wordHeight;
-    expect(coin.y).toBeCloseTo(target);
-    expect(e.pile).toHaveLength(0);
-  });
-
-  it('GAMBLE fires another skill', () => {
-    const e = quiet({ skills: withSkill('GAMBLE', 2) });
-    e.pool = ['GAMBLE'];
-    type(e, 'gamble');
-    const fired = e.drainEvents().filter((ev) => ev.type === 'skillFired');
-    expect(fired).toHaveLength(2);
-    expect(fired[1]).toMatchObject({ via: 'GAMBLE', tier: 2 });
-    expect(fired[1].type === 'skillFired' && fired[1].skill).not.toBe('GAMBLE');
-  });
-
-  it('LUCK raises charge spawn rate for the rest of the level', () => {
-    const e = quiet();
-    e.fire('LUCK', 3);
-    expect(e.luckBonus).toBe(1);
-    e.fire('LUCK', 1);
-    expect(e.luckBonus).toBe(1);
-  });
-
-  it('only spawns charge words for unlocked skills', () => {
+  it('only spawns charge words for owned skills', () => {
     const e = make({ level: 10, skills: withSkill('ICE'), seed: 3 });
     const seen = new Set<string>();
     for (let i = 0; i < 120 * 120 && e.status === 'playing'; i++) {
@@ -412,59 +395,29 @@ describe('skills and the charge pool', () => {
     }
     expect([...seen]).toEqual(['ICE']);
   });
+
+  it('lucky draw raises the charge word rate', () => {
+    const count = (luckyDraw: number) => {
+      const e = make({ level: 5, skills: withSkill('FIRE'), upgrades: { ...emptyUpgrades(), luckyDraw }, seed: 11 });
+      let charges = 0;
+      const seen = new Set<number>();
+      for (let i = 0; i < 120 * 120; i++) {
+        e.step(GameEngine.STEP);
+        for (const w of e.words) if (w.kind === 'charge' && !seen.has(w.id)) (seen.add(w.id), charges++);
+        e.words.length = 0;
+        e.pile.length = 0;
+      }
+      return charges;
+    };
+    expect(count(3)).toBeGreaterThan(count(0) * 1.5);
+  });
 });
 
-describe('upgrades', () => {
-  it('quick cast fires from a prefix, but exact words win', () => {
-    const e = quiet({ skills: withSkill('WIND'), upgrades: { ...emptyUpgrades(), quickCast: 1 } });
-    e.pool = ['WIND'];
-    e.addWord('win');
-    type(e, 'win');
-    expect(e.words).toHaveLength(0);
-    expect(e.pool).toEqual(['WIND']);
-    type(e, 'win');
-    expect(e.pool).toEqual([]);
-  });
-
-  it('steady hands forgives mistakes', () => {
-    const e = quiet({ upgrades: { ...emptyUpgrades(), steadyHands: 1 } });
-    e.combo = 7;
-    e.score = 100;
-    type(e, 'zzz');
-    expect(e.combo).toBe(7);
-    expect(e.score).toBe(100);
-    type(e, 'zzz');
-    expect(e.combo).toBe(0);
-  });
-
-  it('combo keeper drops one tier', () => {
-    const e = quiet({ upgrades: { ...emptyUpgrades(), comboKeeper: 1 } });
-    e.combo = 12;
-    type(e, 'zzz');
-    expect(e.combo).toBe(5);
-  });
-
-  it('charge capacity and head start', () => {
-    const e = quiet({
-      skills: withSkill('ICE'),
-      upgrades: { ...emptyUpgrades(), chargeCapacity: 2, headStart: 2 },
-    });
-    expect(e.capacity).toBe(9);
-    expect(e.pool).toEqual(['ICE', 'ICE']);
-  });
-
+describe('hazards', () => {
   it('black words speed up on mistakes', () => {
     const e = quiet();
     const b = e.addWord('dark', { kind: 'black' });
     type(e, 'zzz');
-    expect(b.speedMul).toBe(2);
-  });
-
-  it('danger radar picks the word closest to landing', () => {
-    const e = quiet({ upgrades: { ...emptyUpgrades(), dangerRadar: 1 } });
-    e.addWord('high', { y: 10 });
-    const low = e.addWord('low', { y: 300 });
-    e.step(GameEngine.STEP);
-    expect(e.dangerWordId).toBe(low.id);
+    expect(b.speedMul).toBe(CONFIG.gameplay.blackWord.speedMultiplier);
   });
 });

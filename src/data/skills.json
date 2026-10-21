@@ -1,137 +1,131 @@
 {
-  "prices": [30, 80, 180],
   "categories": [
-    { "id": "clear", "label": "Clear words" },
-    { "id": "time", "label": "Buy time" },
-    { "id": "protect", "label": "Protect the pile" },
-    { "id": "economy", "label": "Economy" },
-    { "id": "risk", "label": "Risk and reward" }
+    {
+      "id": "clear",
+      "label": "Clear words"
+    },
+    {
+      "id": "time",
+      "label": "Buy time"
+    },
+    {
+      "id": "protect",
+      "label": "Protect the pile"
+    }
   ],
   "skills": [
     {
-      "id": "FIRE", "category": "clear", "color": "#ff5a36", "icon": "fire",
-      "description": "Burns away falling words",
-      "tiers": [
-        { "label": "3 lowest words", "count": 3 },
-        { "label": "Lowest half of words", "fraction": 0.5 },
-        { "label": "Every word on screen", "fraction": 1 }
-      ]
-    },
-    {
-      "id": "BOMB", "category": "clear", "color": "#ff9f1c", "icon": "bomb",
-      "description": "The next word cleared explodes, clearing words around it",
-      "tiers": [
-        { "label": "80 px radius", "radius": 80 },
-        { "label": "140 px radius", "radius": 140 },
-        { "label": "200 px radius", "radius": 200 }
-      ]
-    },
-    {
-      "id": "CHAIN", "category": "clear", "color": "#f7e463", "icon": "chain",
-      "description": "Clearing a word also clears words starting with the same letter",
-      "tiers": [
-        { "label": "5 s", "duration": 5 },
-        { "label": "8 s", "duration": 8 },
-        { "label": "12 s", "duration": 12 }
-      ]
-    },
-    {
-      "id": "ICE", "category": "time", "color": "#7fdbff", "icon": "ice",
-      "description": "Freezes all falling words",
-      "tiers": [
-        { "label": "2 s", "duration": 2 },
-        { "label": "4 s", "duration": 4 },
-        { "label": "6 s", "duration": 6 }
-      ]
-    },
-    {
-      "id": "SLOW", "category": "time", "color": "#b8c4d6", "icon": "slow",
+      "id": "SLOW",
+      "category": "time",
+      "color": "#b8c4d6",
+      "icon": "slow",
+      "unlockLevel": 2,
       "description": "Slows falling words",
+      "prices": [
+        40,
+        100,
+        260
+      ],
       "tiers": [
-        { "label": "70% speed, 5 s", "speed": 0.7, "duration": 5 },
-        { "label": "50% speed, 7 s", "speed": 0.5, "duration": 7 },
-        { "label": "35% speed, 10 s", "speed": 0.35, "duration": 10 }
+        {
+          "label": "40% speed for 6 s",
+          "speed": 0.4,
+          "duration": 6
+        },
+        {
+          "label": "30% speed for 8 s",
+          "speed": 0.3,
+          "duration": 8
+        },
+        {
+          "label": "20% speed for 10 s",
+          "speed": 0.2,
+          "duration": 10
+        }
       ]
     },
     {
-      "id": "REWIND", "category": "time", "color": "#9d7bff", "icon": "rewind",
-      "description": "Pushes all falling words back up the screen",
+      "id": "FIRE",
+      "category": "clear",
+      "color": "#ff5a36",
+      "icon": "fire",
+      "unlockLevel": 3,
+      "description": "Burns away the words closest to the flood",
+      "prices": [
+        60,
+        150,
+        360
+      ],
       "tiers": [
-        { "label": "25% of the height", "fraction": 0.25 },
-        { "label": "50% of the height", "fraction": 0.5 },
-        { "label": "Back to the top", "fraction": 1 }
+        {
+          "label": "2 lowest words",
+          "count": 2
+        },
+        {
+          "label": "3 lowest words",
+          "count": 3
+        },
+        {
+          "label": "4 lowest words",
+          "count": 4
+        }
       ]
     },
     {
-      "id": "SHRINK", "category": "time", "color": "#c9e4ff", "icon": "shrink",
-      "description": "Trims on-screen words to their first letters",
+      "id": "ICE",
+      "category": "time",
+      "color": "#7fdbff",
+      "icon": "ice",
+      "unlockLevel": 5,
+      "description": "Freezes every word and stops new ones arriving",
+      "prices": [
+        50,
+        130,
+        320
+      ],
       "tiers": [
-        { "label": "First 4 letters", "letters": 4 },
-        { "label": "First 3 letters", "letters": 3 },
-        { "label": "First 2 letters", "letters": 2 }
+        {
+          "label": "2.5 s freeze",
+          "duration": 2.5
+        },
+        {
+          "label": "4 s freeze",
+          "duration": 4
+        },
+        {
+          "label": "5.5 s freeze",
+          "duration": 5.5
+        }
       ]
     },
     {
-      "id": "WIND", "category": "protect", "color": "#5ce1b5", "icon": "wind",
-      "description": "Removes rows from the pile",
+      "id": "WIND",
+      "category": "protect",
+      "color": "#5ce1b5",
+      "icon": "wind",
+      "unlockLevel": 7,
+      "description": "A gale blows rows off the pile and pushes falling words back up",
+      "prices": [
+        40,
+        110,
+        280
+      ],
       "tiers": [
-        { "label": "1 row", "rows": 1 },
-        { "label": "2 rows", "rows": 2 },
-        { "label": "4 rows", "rows": 4 }
-      ]
-    },
-    {
-      "id": "SHIELD", "category": "protect", "color": "#4d9dff", "icon": "shield",
-      "description": "The next landed words don't add to the pile",
-      "tiers": [
-        { "label": "1 word", "words": 1 },
-        { "label": "2 words", "words": 2 },
-        { "label": "3 words", "words": 3 }
-      ]
-    },
-    {
-      "id": "MAGNET", "category": "economy", "color": "#ff6fb5", "icon": "magnet",
-      "description": "Coin and charge words drift down to the typing line",
-      "tiers": [
-        { "label": "8 s", "duration": 8 },
-        { "label": "12 s", "duration": 12 },
-        { "label": "16 s", "duration": 16 }
-      ]
-    },
-    {
-      "id": "DOUBLE", "category": "economy", "color": "#a6ff4d", "icon": "double",
-      "description": "Score and coins ×2",
-      "tiers": [
-        { "label": "Next 5 words", "words": 5 },
-        { "label": "Next 10 words", "words": 10 },
-        { "label": "Next 15 words", "words": 15 }
-      ]
-    },
-    {
-      "id": "LUCK", "category": "economy", "color": "#ffd23f", "icon": "luck",
-      "description": "More charge words spawn for the rest of the level",
-      "tiers": [
-        { "label": "+25%", "bonus": 0.25 },
-        { "label": "+50%", "bonus": 0.5 },
-        { "label": "+100%", "bonus": 1 }
-      ]
-    },
-    {
-      "id": "OVERDRIVE", "category": "risk", "color": "#ff3864", "icon": "overdrive",
-      "description": "Words fall 50% faster but score is multiplied",
-      "tiers": [
-        { "label": "×2 for 6 s", "multiplier": 2, "duration": 6, "speed": 1.5 },
-        { "label": "×3 for 8 s", "multiplier": 3, "duration": 8, "speed": 1.5 },
-        { "label": "×4 for 10 s", "multiplier": 4, "duration": 10, "speed": 1.5 }
-      ]
-    },
-    {
-      "id": "GAMBLE", "category": "risk", "color": "#d17bff", "icon": "gamble",
-      "description": "Fires a random other skill, unlocked or not",
-      "tiers": [
-        { "label": "At Tier I", "tier": 1 },
-        { "label": "At Tier II", "tier": 2 },
-        { "label": "At Tier III", "tier": 3 }
+        {
+          "label": "3 rows, words pushed up 20%",
+          "rows": 3,
+          "push": 0.2
+        },
+        {
+          "label": "5 rows, words pushed up 35%",
+          "rows": 5,
+          "push": 0.35
+        },
+        {
+          "label": "Whole pile, words pushed up 55%",
+          "rows": 99,
+          "push": 0.55
+        }
       ]
     }
   ]

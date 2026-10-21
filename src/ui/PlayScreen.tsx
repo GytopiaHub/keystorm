@@ -91,22 +91,25 @@ function reactTo(events: EngineEvent[]) {
       case 'mistake':
         play('mistake');
         s.pulseInput('miss');
-        if (e.forgiven) s.showToast('Mistake forgiven (Steady hands)', 'good');
         break;
-      case 'noCharge':
+      case 'noCharge': {
         play('noCharge');
-        s.showToast(e.locked ? `${e.skill} is locked — buy it in the shop` : `No ${e.skill} charge`, 'info');
+        const unlockAt = CONFIG.skills[e.skill].unlockLevel;
+        s.showToast(
+          !e.locked
+            ? `No ${e.skill} charge`
+            : s.progress.currentLevel < unlockAt
+              ? `${e.skill} unlocks at level ${unlockAt}`
+              : `${e.skill} is locked — buy it in the shop`,
+          'info',
+        );
         break;
+      }
       case 'skillFired':
-        play(e.skill === 'BOMB' ? 'thunder' : 'skill');
-        if (e.via === 'GAMBLE') s.showToast(`GAMBLE → ${e.skill} (Tier ${e.tier})`, 'good');
-        break;
-      case 'bomb':
-        play('thunder');
+        play('skill');
         break;
       case 'landed':
         play('land');
-        if (e.shielded) s.showToast('Shield absorbed a word', 'good');
         break;
       case 'comboTier':
         play('combo');
@@ -247,13 +250,8 @@ function ComboMeter({ hud }: { hud: HudSnapshot }) {
   );
 }
 
-const EFFECT_LABEL: Record<string, string> = {
-  CHAIN: 'Chain',
-  ICE: 'Frozen',
-  SLOW: 'Slow',
-  MAGNET: 'Magnet',
-  OVERDRIVE: 'Overdrive',
-};
+/** Chip text for timed skills; others show their name. */
+const EFFECT_LABEL: Partial<Record<SkillId, string>> = { ICE: 'Frozen', SLOW: 'Slow' };
 
 function EffectsBar() {
   const hud = useGame((s) => s.hud);
@@ -261,13 +259,9 @@ function EffectsBar() {
   const chips: { key: string; skill: SkillId; text: string; frac?: number }[] = hud.effects.map((e) => ({
     key: e.skill,
     skill: e.skill,
-    text: `${EFFECT_LABEL[e.skill]}${e.skill === 'OVERDRIVE' ? ` ×${hud.overdriveMultiplier}` : ''} ${e.remaining.toFixed(1)}s`,
+    text: `${EFFECT_LABEL[e.skill] ?? e.skill} ${e.remaining.toFixed(1)}s`,
     frac: e.remaining / e.duration,
   }));
-  if (hud.bombArmed) chips.push({ key: 'bomb', skill: 'BOMB', text: 'Bomb armed' });
-  if (hud.doubleLeft > 0) chips.push({ key: 'double', skill: 'DOUBLE', text: `Double ×${hud.doubleLeft}` });
-  if (hud.shieldLeft > 0) chips.push({ key: 'shield', skill: 'SHIELD', text: `Shield ×${hud.shieldLeft}` });
-  if (hud.luckBonus > 0) chips.push({ key: 'luck', skill: 'LUCK', text: `Luck +${Math.round(hud.luckBonus * 100)}%` });
   if (!chips.length) return null;
   return (
     <div className="pointer-events-none absolute left-3 top-3 flex flex-col gap-1.5" aria-live="polite">

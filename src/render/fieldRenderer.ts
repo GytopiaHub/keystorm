@@ -31,24 +31,14 @@ function iconSprite(name: string, size: number): Sprite {
 
 const wordIcon = (w: Word) => (w.kind === 'coin' ? 'coin' : w.kind === 'black' ? 'storm' : CONFIG.skills[w.skill!].icon);
 
-const WEATHER_TINT: Record<SkillId, { color: number; alpha: number }> = {
+/** Sky tint while a skill's weather shows. Skills not listed tint with their own colour. */
+const WEATHER_TINT: Partial<Record<SkillId, { color: number; alpha: number }>> = {
   FIRE: { color: 0xff3b1f, alpha: 0.34 },
-  BOMB: { color: 0xfff6d5, alpha: 0.3 },
-  CHAIN: { color: 0xf7e463, alpha: 0.12 },
   ICE: { color: 0x7fdbff, alpha: 0.28 },
   SLOW: { color: 0x9aa6b8, alpha: 0.3 },
-  REWIND: { color: 0x9d7bff, alpha: 0.24 },
-  SHRINK: { color: 0xc9e4ff, alpha: 0.18 },
   WIND: { color: 0x5ce1b5, alpha: 0.2 },
-  SHIELD: { color: 0x4d9dff, alpha: 0.16 },
-  MAGNET: { color: 0xff6fb5, alpha: 0.2 },
-  DOUBLE: { color: 0xa6ff4d, alpha: 0.12 },
-  LUCK: { color: 0xffd23f, alpha: 0.24 },
-  OVERDRIVE: { color: 0xff0033, alpha: 0.24 },
-  GAMBLE: { color: 0xd17bff, alpha: 0.26 },
 };
-
-const TIMED = ['CHAIN', 'ICE', 'SLOW', 'MAGNET', 'OVERDRIVE'] as const;
+const tintFor = (s: SkillId) => WEATHER_TINT[s] ?? { color: skillColor(s), alpha: 0.2 };
 
 interface Weather {
   skill: SkillId;
@@ -294,10 +284,10 @@ export class FieldRenderer {
         case 'cleared': {
           this.deaths.set(e.word.id, { mode: 'pop' });
           if (e.cause === 'levelEnd') break;
-          const color = e.cause === 'fire' ? 0xff7a1a : palette(e.word).glow;
+          const color = e.cause === 'skill' ? 0xff7a1a : palette(e.word).glow;
           this.shatter(e.word, color);
           const cy = e.word.y + WORD_H / 2;
-          this.popup(`+${e.points}`, e.word.x, cy - 6, e.word.kind === 'coin' ? 0xffd23f : 0xffffff, 22);
+          if (e.points > 0) this.popup(`+${e.points}`, e.word.x, cy - 6, e.word.kind === 'coin' ? 0xffd23f : 0xffffff, 22);
           if (e.word.kind === 'coin') this.popup(`+${e.coins} coins`, e.word.x, cy + 18, 0xffd23f, 15, 0.08);
           if (this.pendingCharge) {
             const s = this.pendingCharge;
@@ -311,42 +301,21 @@ export class FieldRenderer {
           break;
         case 'landed':
           this.deaths.set(e.word.id, { mode: 'sink' });
-          this.splash(e.word.x, this.surfaceY, e.shielded ? 0x4d9dff : 0x8fd8ff, 18);
-          if (!e.shielded) this.shake = Math.max(this.shake, 4);
+          this.splash(e.word.x, this.surfaceY, 0x8fd8ff, 18);
+          this.shake = Math.max(this.shake, 4);
           break;
         case 'mistake':
-          if (!e.forgiven) {
-            this.shake = Math.max(this.shake, 8);
-            this.hurt = 1;
-            this.popup(`−${CONFIG.gameplay.scoring.mistakePenalty}`, W / 2, H - 70, 0xff4d6a, 26);
-          }
+          this.shake = Math.max(this.shake, 8);
+          this.hurt = 1;
+          this.popup(`−${CONFIG.gameplay.scoring.mistakePenalty}`, W / 2, H - 70, 0xff4d6a, 26);
           break;
         case 'skillFired': {
-          const delay = e.via === 'GAMBLE' ? 0.9 : 0;
-          this.weathers.push({ skill: e.skill, t: -delay, duration: Math.max(1.2, e.duration) });
+          this.weathers.push({ skill: e.skill, t: 0, duration: Math.max(1.2, e.duration) });
           const def = CONFIG.skills[e.skill];
-          this.banner(`${e.skill} ${ROMAN[e.tier]}`, hex(def.color), H * 0.38, 46, 1.2, delay, def.icon);
-          if (e.skill === 'BOMB' && !delay) this.flash = 0.4;
-          if (e.skill === 'FIRE' && !delay) this.shake = Math.max(this.shake, 6);
+          this.banner(`${e.skill} ${ROMAN[e.tier]}`, hex(def.color), H * 0.38, 46, 1.2, 0, def.icon);
+          if (e.skill === 'FIRE') this.shake = Math.max(this.shake, 6);
           break;
         }
-        case 'bomb':
-          this.flash = 0.8;
-          this.rings.push({ x: e.x, y: e.y, radius: e.radius, life: 0.55, max: 0.55, color: 0xffe08a });
-          this.rings.push({ x: e.x, y: e.y, radius: e.radius * 0.6, life: 0.4, max: 0.4, color: 0xffffff });
-          this.bolts.push({ paths: this.boltTree(e.x + 40, -10, e.x, e.y, 2), life: 0.4, max: 0.4, color: 0xfff3b0 });
-          for (let i = 0; i < 40; i++) {
-            const a = Math.random() * Math.PI * 2;
-            const s = 200 + Math.random() * 400;
-            this.spawn(e.x, e.y, Math.cos(a) * s, Math.sin(a) * s, 0.5, 2.5, 0xffc04d, 200, true);
-          }
-          this.shake = Math.max(this.shake, 14);
-          break;
-        case 'chain':
-          for (const to of e.to) {
-            this.bolts.push({ paths: [this.boltPath(e.from.x, e.from.y, to.x, to.y, 10)], life: 0.5, max: 0.5, color: 0xfff27a });
-          }
-          break;
         case 'comboTier': {
           const tier = CONFIG.gameplay.combo.tiers.findIndex((t) => t.multiplier === e.multiplier);
           this.banner(`×${e.multiplier} COMBO`, COMBO_COLORS[Math.max(0, tier)] || 0xd946ef, H * 0.26, 34, 1.1);
@@ -381,7 +350,7 @@ export class FieldRenderer {
     for (const w of this.weathers) w.t += dt;
     this.weathers = this.weathers.filter((w) => w.t < w.duration);
 
-    const targetSurface = H - engine.pile.length * FIELD.rowHeight;
+    const targetSurface = engine.landingY;
     this.surfaceY += (targetSurface - this.surfaceY) * Math.min(1, dt * (this.reducedMotion ? 60 : 8));
 
     this.moveClouds(dt);
@@ -407,7 +376,7 @@ export class FieldRenderer {
   /** 0–1 strength of a skill's weather, fading in and out. */
   private strength(engine: GameEngine, skill: SkillId): number {
     let s = 0;
-    const timed = engine.effects[skill as (typeof TIMED)[number]];
+    const timed = engine.effects[skill];
     if (timed) s = Math.min(1, timed.remaining / 0.4, (timed.duration - timed.remaining) / 0.2);
     for (const w of this.weathers) {
       if (w.skill !== skill || w.t < 0) continue;
@@ -421,7 +390,7 @@ export class FieldRenderer {
   private syncWords(engine: GameEngine, dt: number): void {
     const highlighted = engine.highlighted();
     const buf = engine.buffer;
-    const frozen = !!engine.effects.ICE;
+    const frozen = engine.frozen;
     const seen = new Set<number>();
     for (const w of engine.words) {
       seen.add(w.id);
@@ -433,10 +402,9 @@ export class FieldRenderer {
       }
       view.age += dt;
       const hl = highlighted.has(w.id) ? buf.length : 0;
-      const danger = engine.dangerWordId === w.id;
-      const key = `${w.text}|${hl}|${danger}|${frozen}|${w.speedMul}`;
+      const key = `${w.text}|${hl}|${frozen}|${w.speedMul}`;
       if (key !== view.key) {
-        this.drawView(view, w, hl, danger, frozen);
+        this.drawView(view, w, hl, frozen);
         view.key = key;
       }
 
@@ -455,7 +423,7 @@ export class FieldRenderer {
       view.root.alpha = Math.min(1, k * 1.5);
 
       const pulse = this.reducedMotion ? 0.7 : 0.55 + 0.45 * Math.sin(this.time * 4 + w.id);
-      view.halo.alpha = hl ? 1 : danger ? 0.6 + 0.4 * Math.sin(this.time * 14) : w.kind === 'normal' ? 0.35 : pulse;
+      view.halo.alpha = hl ? 1 : w.kind === 'normal' ? 0.35 : pulse;
     }
     for (const [id, view] of this.views) {
       if (seen.has(id)) continue;
@@ -506,13 +474,13 @@ export class FieldRenderer {
     return w.text.length * this.charWidth + FIELD.wordPadding + (w.kind === 'normal' ? 0 : 26);
   }
 
-  private drawView(view: WordView, w: Word, hl: number, danger: boolean, frozen: boolean): void {
+  private drawView(view: WordView, w: Word, hl: number, frozen: boolean): void {
     const p = palette(w);
     const width = this.viewWidth(w);
     const h = WORD_H;
     view.width = width;
     view.root.pivot.set(width / 2, h / 2);
-    const glow = hl ? 0x5cff9d : danger ? 0xff3b3b : p.glow;
+    const glow = hl ? 0x5cff9d : p.glow;
 
     const halo = view.halo;
     halo.clear();
@@ -551,7 +519,6 @@ export class FieldRenderer {
       }
     }
     if (hl > 0) g.roundRect(-1, -1, width + 2, h + 2, 10).stroke({ width: 2, color: 0x5cff9d });
-    if (danger) g.roundRect(-4, -4, width + 8, h + 8, 12).stroke({ width: 2.5, color: 0xff3b3b });
     if (frozen) {
       g.roundRect(0, 0, width, h, 9).fill({ color: 0xbfefff, alpha: 0.32 });
       g.roundRect(0, 0, width, h, 9).stroke({ width: 2, color: 0xe6fbff, alpha: 0.9 });
@@ -665,7 +632,7 @@ export class FieldRenderer {
     this.pileTexts = engine.pile.map((row, i) => {
       const t = new Text({ text: row.text.toUpperCase(), style: this.pileStyle });
       t.anchor.set(0.5);
-      t.position.set(W / 2 + ((i * 137) % 300) - 150, H - (i + 0.5) * FIELD.rowHeight);
+      t.position.set(W / 2 + ((i * 137) % 300) - 150, H - (i + 0.5) * engine.rowHeight);
       t.alpha = 0.45;
       this.pileLayer.addChild(t);
       return t;
@@ -688,7 +655,7 @@ export class FieldRenderer {
     g.poly([...pts, W, H, 0, H]).fill({ color: 0x1569b0, alpha: 0.82 });
 
     // Depth bands: darker toward the bottom.
-    const rh = FIELD.rowHeight;
+    const rh = engine.rowHeight;
     for (let i = 0; i < engine.pile.length; i++) {
       const y = H - (i + 1) * rh;
       g.rect(0, y + rh - 1.5, W, 1.5).fill({ color: 0x9fdcff, alpha: 0.12 });
@@ -759,12 +726,11 @@ export class FieldRenderer {
   private drawTint(engine: GameEngine): void {
     const g = this.tint;
     g.clear();
-    for (const skill of Object.keys(WEATHER_TINT) as SkillId[]) {
+    for (const skill of CONFIG.skillOrder) {
       const s = this.strength(engine, skill);
       if (s <= 0) continue;
-      const tint = WEATHER_TINT[skill];
-      let alpha = tint.alpha * s;
-      if (skill === 'OVERDRIVE' && !this.reducedMotion) alpha *= 0.55 + 0.45 * Math.max(0, Math.sin(this.time * 10));
+      const tint = tintFor(skill);
+      const alpha = tint.alpha * s;
       // Heavier at the top, like weather filling the sky.
       g.rect(0, 0, W, H).fill({ color: tint.color, alpha: alpha * 0.6 });
       g.rect(0, 0, W, H * 0.5).fill({ color: tint.color, alpha: alpha * 0.5 });
@@ -796,26 +762,21 @@ export class FieldRenderer {
       this.nextAmbientBolt = 5 + Math.random() * 9;
     }
 
-    const overdrive = !!engine.effects.OVERDRIVE;
     const slow = engine.effects.SLOW ? 0.25 : 1;
-    const rewind = this.strength(engine, 'REWIND') > 0;
     const wind = this.strength(engine, 'WIND') > 0;
-    const ice = !!engine.effects.ICE;
-    const target = Math.round((overdrive ? 300 : 110) * (W / 960));
+    const ice = engine.frozen;
+    const target = Math.round(110 * (W / 960));
     while (this.rain.length < target) this.rain.push(this.newDrop(true));
     if (this.rain.length > target) this.rain.length = target;
 
-    const dir = rewind ? -1 : 1;
-    const slant = wind ? 1.1 : overdrive ? 0.4 : 0.14;
-    const speedMul = (overdrive ? 1.8 : 1) * slow;
+    const slant = wind ? 1.1 : 0.14;
     for (const d of this.rain) {
-      d.y += d.speed * speedMul * dir * dt;
-      d.x += d.speed * speedMul * slant * dt;
-      const hitWater = dir > 0 && d.y > this.surfaceY;
+      d.y += d.speed * slow * dt;
+      d.x += d.speed * slow * slant * dt;
+      const hitWater = d.y > this.surfaceY;
       if (hitWater && d.near && Math.random() < 0.35) this.splash(d.x, this.surfaceY, 0xa8dcff, 2);
-      if (hitWater || d.y < -40 || d.x > W + 20) {
+      if (hitWater || d.x > W + 20) {
         Object.assign(d, this.newDrop(false));
-        if (dir < 0) d.y = this.surfaceY;
         if (d.x > W) d.x -= W;
       }
     }
@@ -823,9 +784,9 @@ export class FieldRenderer {
       for (const d of this.rain) {
         if (d.near !== near) continue;
         if (ice) g.circle(d.x, d.y, near ? 2.2 : 1.2).fill({ color: 0xffffff, alpha: near ? 0.85 : 0.45 });
-        else g.moveTo(d.x, d.y).lineTo(d.x - d.len * slant * 0.6, d.y - d.len * dir);
+        else g.moveTo(d.x, d.y).lineTo(d.x - d.len * slant * 0.6, d.y - d.len);
       }
-      if (!ice) g.stroke({ width: near ? 1.6 : 1, color: near ? 0xa9c8ff : 0x6d88c4, alpha: near ? (overdrive ? 0.7 : 0.45) : 0.25 });
+      if (!ice) g.stroke({ width: near ? 1.6 : 1, color: near ? 0xa9c8ff : 0x6d88c4, alpha: near ? 0.45 : 0.25 });
     }
 
     const fog = this.strength(engine, 'SLOW');
@@ -835,55 +796,19 @@ export class FieldRenderer {
         g.ellipse(x, 100 + (i % 4) * 110, 220, 70).fill({ color: 0xcdd6e4, alpha: 0.07 * fog });
       }
     }
-    const luck = this.strength(engine, 'LUCK');
-    if (luck > 0) {
-      for (let i = 0; i < 9; i++) {
-        const a = -Math.PI / 2 + (i - 4) * 0.2 + Math.sin(this.time * 0.6 + i) * 0.05;
-        const x2 = W / 2 + Math.cos(a) * H * 1.8;
-        const y2 = -Math.sin(a) * H * 1.8;
-        g.poly([W / 2 - 14, -10, W / 2 + 14, -10, x2 + 70, y2, x2 - 70, y2]).fill({ color: 0xffe28a, alpha: 0.07 * luck });
-      }
-      g.circle(W / 2, -20, 90).fill({ color: 0xfff1b8, alpha: 0.25 * luck });
-    }
-    const rainbow = this.strength(engine, 'DOUBLE');
-    if (rainbow > 0) {
-      const colors = [0xff4d4d, 0xffa64d, 0xfff04d, 0x6dff6d, 0x4dc3ff, 0x8c6dff];
-      for (const base of [430, 520]) {
-        colors.forEach((c, i) => {
-          const r = base - i * 10;
-          g.moveTo(W / 2 - r, H + 40).arc(W / 2, H + 40, r, Math.PI, 0).stroke({ width: 10, color: c, alpha: 0.22 * rainbow });
-        });
-      }
-    }
   }
 
   private drawFront(engine: GameEngine, dt: number): void {
     const g = this.front;
     g.clear();
-    const rh = FIELD.rowHeight;
-
     // Danger line, glowing harder as the pile nears it.
-    const dy = H - engine.dangerRows * rh;
+    const dy = engine.dangerY;
     const near = engine.pile.length / engine.dangerRows;
     const pulse = this.reducedMotion ? 1 : 0.6 + 0.4 * Math.sin(this.time * (4 + near * 10));
     g.rect(0, dy - 3, W, 6).fill({ color: 0xff2040, alpha: (0.08 + near * 0.25) * pulse });
     for (let x = 0; x < W; x += 24) g.rect(x, dy - 1, 14, 2).fill({ color: 0xff4d6a, alpha: 0.6 + 0.4 * near * pulse });
     this.dangerLabel.position.set(W - 8, dy - 4);
     this.dangerLabel.alpha = 0.5 + 0.5 * near * pulse;
-
-    const shield = Math.max(engine.shieldLeft > 0 ? 1 : 0, this.strength(engine, 'SHIELD'));
-    if (shield > 0) {
-      const top = this.surfaceY;
-      const ry = 50 + engine.pile.length * 2;
-      for (let i = 0; i < 4; i++) {
-        g.ellipse(W / 2, top + 4, W * 0.56 + i * 4, ry + i * 4).stroke({ width: 3, color: 0x7fc4ff, alpha: (0.5 - i * 0.12) * shield });
-      }
-      g.ellipse(W / 2, top + 4, W * 0.56, ry).fill({ color: 0x4d9dff, alpha: 0.06 * shield });
-      if (!this.reducedMotion) {
-        const a = this.time * 1.5;
-        g.circle(W / 2 + Math.cos(a) * W * 0.56, top + 4 + Math.sin(a) * ry, 5).fill({ color: 0xffffff, alpha: 0.7 * shield });
-      }
-    }
 
     if (this.reducedMotion) {
       this.particles = [];
@@ -935,22 +860,6 @@ export class FieldRenderer {
       g.circle(r.x, r.y, radius).stroke({ width: 3, color: 0xffffff, alpha: Math.max(0, 1 - k) });
     }
     this.rings = this.rings.filter((r) => r.life > 0);
-
-    const tornado = this.weathers.find((w) => w.skill === 'GAMBLE' && w.t >= 0);
-    if (tornado) {
-      const s = Math.min(1, (tornado.duration - tornado.t) / 0.3, tornado.t / 0.15);
-      for (let i = 0; i < 16; i++) {
-        const y = 30 + i * 30;
-        const rx = 14 + i * 9;
-        const cx = W / 2 + Math.sin(this.time * 7 + i * 0.55) * (10 + i * 2);
-        g.ellipse(cx, y, rx, 7 + i * 0.6).stroke({ width: 2.5, color: 0xd9b3ff, alpha: 0.55 * s });
-      }
-      for (let i = 0; i < 4; i++) {
-        const a = this.time * 9 + i * 1.6;
-        const y = 60 + ((this.time * 120 + i * 110) % 420);
-        this.spawn(W / 2 + Math.cos(a) * (20 + y * 0.3), y, -Math.sin(a) * 200, -60, 0.4, 2, 0xf0d9ff, 0, true);
-      }
-    }
   }
 
   private emitWeatherParticles(engine: GameEngine, dt: number): void {
@@ -971,38 +880,8 @@ export class FieldRenderer {
         this.spawn(Math.random() * W, H - Math.random() * 60, (Math.random() - 0.5) * 60, -120 - Math.random() * 160, 1.4, 2.5, Math.random() < 0.5 ? 0xff7a1a : 0xffc04d, -30),
       );
     }
-    if (this.strength(engine, 'SHRINK') > 0) {
-      many(90, () => this.spawn(Math.random() * W, -10, (Math.random() - 0.5) * 40, 700 + Math.random() * 200, 1, 2.5, 0xeaf6ff, 300, true));
-    }
     if (this.strength(engine, 'WIND') > 0) {
       many(90, () => this.spawn(-20, Math.random() * H, 900 + Math.random() * 500, (Math.random() - 0.5) * 60, 1.2, 1.6, 0xc8fff0, 0, true));
-    }
-    if (this.strength(engine, 'REWIND') > 0) {
-      many(80, () => this.spawn(Math.random() * W, H, (Math.random() - 0.5) * 40, -700 - Math.random() * 300, 0.9, 1.5, 0xc7b5ff, 0, true));
-    }
-    if (engine.effects.OVERDRIVE) {
-      many(40, () => this.spawn(W + 10, Math.random() * H, -1400, 0, 0.6, 1.2, 0xff6680, 0, true));
-    }
-    if (engine.effects.MAGNET) {
-      many(60, () => {
-        const a = Math.random() * Math.PI * 2;
-        const r = 300;
-        const x = W / 2 + Math.cos(a) * r;
-        const y = H * 0.5 + Math.sin(a) * r * 0.45;
-        const tx = W / 2 - x;
-        const ty = H * 0.72 - y;
-        this.spawn(x, y, tx * 1.3 - ty * 0.8, ty * 1.3 + tx * 0.4, 0.8, 1.8, 0xff9fd0, 0, true);
-      });
-    }
-    if (engine.effects.CHAIN && Math.random() < 3 * dt) {
-      const x = Math.random() * W;
-      this.bolts.push({ paths: [this.boltPath(x, 0, x + (Math.random() - 0.5) * 120, 120 + Math.random() * 120, 7)], life: 0.2, max: 0.2, color: 0xf7e463 });
-    }
-    if (engine.shieldLeft > 0) {
-      many(16, () => this.spawn(Math.random() * W, this.surfaceY - 10, 0, -40, 0.8, 1.6, 0xbfe0ff, 0));
-    }
-    if (this.strength(engine, 'LUCK') > 0) {
-      many(30, () => this.spawn(Math.random() * W, Math.random() * H * 0.7, 0, 20, 1.2, 2, 0xffe28a, 0));
     }
     if (engine.multiplier >= 3) {
       many(25, () => this.spawn(Math.random() * W, this.surfaceY, (Math.random() - 0.5) * 30, -90 - Math.random() * 60, 1.4, 2, 0xfacc15, 0));
@@ -1013,7 +892,7 @@ export class FieldRenderer {
     const o = this.overlay;
     o.clear();
 
-    this.frost.alpha = engine.effects.ICE ? this.strength(engine, 'ICE') : 0;
+    this.frost.alpha = this.strength(engine, 'ICE');
 
     // Flames rise during FIRE, and smoulder at the edges while the combo is maxed out.
     const fire = Math.max(this.strength(engine, 'FIRE'), engine.multiplier >= 3 ? 0.25 : 0);

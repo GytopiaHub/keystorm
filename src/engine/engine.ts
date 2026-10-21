@@ -12,12 +12,12 @@ import {
   type PileRow,
   type SkillId,
   type SkillTiers,
-  type TimedEffect,
   type UpgradeRanks,
   type Word,
   type WordKind,
   type WordListId,
 } from './types';
+import { SKILL_BEHAVIOURS } from './skills';
 import { WordBank } from './words';
 
 export interface EngineOptions {
@@ -42,19 +42,12 @@ export interface HudSnapshot {
   multiplier: number;
   pool: SkillId[];
   capacity: number;
-  effects: { skill: TimedEffect; remaining: number; duration: number }[];
-  bombArmed: boolean;
-  doubleLeft: number;
-  shieldLeft: number;
-  luckBonus: number;
-  overdriveMultiplier: number;
+  effects: { skill: SkillId; remaining: number; duration: number }[];
   pileRows: number;
   dangerRows: number;
-  forgivesLeft: number;
   status: EngineStatus;
 }
 
-const TIMED: TimedEffect[] = ['CHAIN', 'ICE', 'SLOW', 'MAGNET', 'OVERDRIVE'];
 /** How long instant skills show their weather, in seconds. */
 const INSTANT_WEATHER = 1.6;
 
@@ -81,18 +74,13 @@ export class GameEngine {
   combo = 0;
   maxCombo = 0;
   pool: SkillId[] = [];
-  effects: Partial<Record<TimedEffect, ActiveEffect>> = {};
-  bombRadius: number | null = null;
-  doubleLeft = 0;
-  shieldLeft = 0;
-  luckBonus = 0;
-  dangerWordId: number | null = null;
+  /** Timed skills currently running, keyed by skill. */
+  effects: Partial<Record<SkillId, ActiveEffect>> = {};
   elapsed = 0;
   /** Bumped on every discrete state change so the UI can skip redundant HUD updates. */
   version = 0;
 
   mistakes = 0;
-  forgiven = 0;
   correctSubmissions = 0;
   correctChars = 0;
   wordsCleared = 0;
@@ -115,11 +103,6 @@ export class GameEngine {
     this.upgrades = { ...opts.upgrades };
     this.rng = new Rng(opts.seed ?? randomSeed());
     this.bank = opts.wordBank ?? defaultBank();
-
-    const unlocked = this.unlockedSkills();
-    for (let i = 0; i < this.upgrades.headStart && unlocked.length; i++) {
-      if (this.pool.length < this.capacity) this.pool.push(this.rng.pick(unlocked));
-    }
   }
 
   // ---- derived values ------------------------------------------------------------------
@@ -157,13 +140,22 @@ export class GameEngine {
     return this.field.baseDangerRows + this.upgradeValue('reinforcedFloor');
   }
 
+  /**
+   * Height each landed word adds. Reinforced floor fits more rows under the same danger line
+   * by packing them tighter, rather than raising the line (a taller pile would shorten every
+   * word's fall and make things worse).
+   */
+  get rowHeight(): number {
+    return (this.field.rowHeight * this.field.baseDangerRows) / this.dangerRows;
+  }
+
   /** Y at which a falling word's bottom edge touches the pile (FR-13). */
   get landingY(): number {
-    return this.field.height - this.pile.length * this.field.rowHeight;
+    return this.field.height - this.pile.length * this.rowHeight;
   }
 
   get dangerY(): number {
-    return this.field.height - this.dangerRows * this.field.rowHeight;
+    return this.field.height - this.field.baseDangerRows * this.field.rowHeight;
   }
 
   get multiplier(): number {
@@ -181,10 +173,6 @@ export class GameEngine {
     const level = Math.round(this.coinBase.level * m);
     const perfect = Math.round(this.coinBase.perfect * m);
     return { words, coinWords, level, perfect, total: words + coinWords + level + perfect };
-  }
-
-  get forgivesLeft(): number {
-    return Math.max(0, this.upgrades.steadyHands - this.forgiven);
   }
 
   private upgradeValue(id: keyof UpgradeRanks): number {
@@ -210,9 +198,8 @@ export class GameEngine {
     if (this.status !== 'playing') return;
     this.elapsed += dt;
 
-    for (const key of TIMED) {
-      const e = this.effects[key];
-      if (!e) continue;
+    for (const key of Object.keys(this.effects) as SkillId[]) {
+      const e = this.effects[key]!;
       e.remaining -= dt;
       if (e.remaining <= 0) {
         delete this.effects[key];
@@ -220,8 +207,7 @@ export class GameEngine {
       }
     }
 
-    const frozen = !!this.effects.ICE;
-    if (!frozen) {
+    if (!this.frozen) {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
         // When there's no room, retry shortly instead of waiting a full interval.
@@ -229,46 +215,35 @@ export class GameEngine {
       }
       this.moveWords(dt);
     }
+  }
 
-    if (this.upgrades.dangerRadar > 0) this.updateDangerWord();
+  /** Active timed skills with their behaviour and tier numbers. */
+  private activeTimed() {
+    return (Object.keys(this.effects) as SkillId[]).map((skill) => ({
+      timed: SKILL_BEHAVIOURS[skill].timed ?? {},
+      tier: this.tierDef(skill, this.effects[skill]!.tier),
+    }));
+  }
+
+  /** True while a freezing skill (ICE) runs: nothing falls or spawns. */
+  get frozen(): boolean {
+    return this.activeTimed().some((e) => e.timed.freezes);
   }
 
   private fallSpeed(): number {
     let speed = this.params.fallSpeed * this.heightScale;
-    if (this.effects.SLOW) speed *= this.tierDef('SLOW', this.effects.SLOW.tier).speed ?? 1;
-    if (this.effects.OVERDRIVE) speed *= this.tierDef('OVERDRIVE', this.effects.OVERDRIVE.tier).speed ?? 1;
+    for (const e of this.activeTimed()) if (e.timed.speed) speed *= e.timed.speed(e.tier);
     return speed;
   }
 
   private moveWords(dt: number): void {
     const speed = this.fallSpeed();
     const h = this.field.wordHeight;
-    const magnet = !!this.effects.MAGNET;
     for (const word of [...this.words]) {
-      if (magnet && (word.kind === 'coin' || word.kind === 'charge')) {
-        const target = this.landingY - this.config.gameplay.magnet.hoverRowsAbovePile * this.field.rowHeight - h;
-        const pull = this.config.gameplay.magnet.pullSpeed * this.heightScale;
-        if (word.y < target) word.y = Math.min(target, word.y + pull * dt);
-      } else {
-        word.y += speed * word.speedMul * dt;
-      }
+      word.y += speed * word.speedMul * dt;
       if (word.y + h >= this.landingY) this.land(word);
       if (this.status !== 'playing') return;
     }
-  }
-
-  private updateDangerWord(): void {
-    let best: Word | null = null;
-    let bestScore = Infinity;
-    for (const w of this.words) {
-      const distance = this.landingY - (w.y + this.field.wordHeight);
-      const s = distance / w.speedMul;
-      if (s < bestScore) {
-        bestScore = s;
-        best = w;
-      }
-    }
-    this.dangerWordId = best?.id ?? null;
   }
 
   // ---- spawning ------------------------------------------------------------------------
@@ -279,7 +254,7 @@ export class GameEngine {
 
     const p = this.params;
     const unlocked = this.unlockedSkills();
-    const chargeChance = p.chargeWordChance * (1 + this.upgradeValue('luckyDraw')) * (1 + this.luckBonus);
+    const chargeChance = p.chargeWordChance * (1 + this.upgradeValue('luckyDraw'));
     let kind: WordKind = 'normal';
     let skill: SkillId | undefined;
     const roll = this.rng.next();
@@ -346,13 +321,8 @@ export class GameEngine {
 
   private land(word: Word): void {
     this.removeWord(word);
-    if (this.shieldLeft > 0) {
-      this.shieldLeft--;
-      this.emit({ type: 'landed', word, shielded: true });
-      return;
-    }
     this.pile.push({ text: word.original, kind: word.kind });
-    this.emit({ type: 'landed', word, shielded: false });
+    this.emit({ type: 'landed', word });
     if (this.pile.length >= this.dangerRows) this.fail();
   }
 
@@ -393,7 +363,7 @@ export class GameEngine {
     this.version++;
     if (!input) return;
 
-    // An exact on-screen word always wins, even over a Quick cast prefix.
+    // An on-screen word always wins over a skill name.
     let target: Word | null = null;
     for (const w of this.words) if (w.text === input && (!target || w.y > target.y)) target = w;
     if (target) {
@@ -410,12 +380,7 @@ export class GameEngine {
   }
 
   matchSkill(input: string): SkillId | null {
-    const exact = SKILL_IDS.find((s) => s.toLowerCase() === input);
-    if (exact) return exact;
-    if (this.upgrades.quickCast > 0 && input.length >= 3) {
-      return SKILL_IDS.find((s) => s.toLowerCase().startsWith(input)) ?? null;
-    }
-    return null;
+    return SKILL_IDS.find((s) => s.toLowerCase() === input) ?? null;
   }
 
   private typedClear(target: Word, input: string): void {
@@ -428,54 +393,19 @@ export class GameEngine {
     if (tier > prevTier) this.emit({ type: 'comboTier', combo: this.combo, multiplier: this.multiplier });
 
     this.clearWord(target, 'typed');
-    const cx = target.x;
-    const cy = target.y + this.field.wordHeight / 2;
-
-    if (this.bombRadius !== null) {
-      const r = this.bombRadius;
-      this.bombRadius = null;
-      this.emit({ type: 'bomb', x: cx, y: cy, radius: r });
-      for (const w of [...this.words]) {
-        if (Math.hypot(w.x - cx, w.y + this.field.wordHeight / 2 - cy) <= r) this.clearWord(w, 'bomb');
-      }
-    }
-
-    if (this.effects.CHAIN) {
-      const letter = target.text[0];
-      const linked = this.words.filter((w) => w.text[0] === letter);
-      if (linked.length) {
-        this.emit({
-          type: 'chain',
-          from: { x: cx, y: cy },
-          to: linked.map((w) => ({ x: w.x, y: w.y + this.field.wordHeight / 2 })),
-        });
-        for (const w of linked) this.clearWord(w, 'chain');
-      }
-    }
     this.checkComplete();
   }
 
   private mistake(text: string): void {
-    if (this.forgivesLeft > 0) {
-      this.forgiven++;
-      this.version++;
-      this.emit({ type: 'mistake', forgiven: true, text });
-      return;
-    }
     this.mistakes++;
-    if (this.upgrades.comboKeeper > 0) {
-      const idx = comboTierIndex(this.combo, this.config);
-      this.combo = idx > 0 ? this.config.gameplay.combo.tiers[idx - 1].min : 0;
-    } else {
-      this.combo = 0;
-    }
+    this.combo = 0;
     this.score = Math.max(0, this.score - this.config.gameplay.scoring.mistakePenalty);
     const black = this.config.gameplay.blackWord;
     for (const w of this.words) {
       if (w.kind === 'black') w.speedMul = Math.min(black.maxMultiplier, w.speedMul * black.speedMultiplier);
     }
     this.version++;
-    this.emit({ type: 'mistake', forgiven: false, text });
+    this.emit({ type: 'mistake', text });
   }
 
   // ---- clearing and scoring ------------------------------------------------------------
@@ -483,7 +413,6 @@ export class GameEngine {
   private removeWord(word: Word): void {
     const i = this.words.indexOf(word);
     if (i >= 0) this.words.splice(i, 1);
-    if (this.dangerWordId === word.id) this.dangerWordId = null;
     this.version++;
   }
 
@@ -493,22 +422,19 @@ export class GameEngine {
       this.emit({ type: 'cleared', word, cause, points: 0, coins: 0 });
       return;
     }
-    const doubled = this.doubleLeft > 0 ? 2 : 1;
-    if (doubled > 1) this.doubleLeft--;
-    const overdrive = this.effects.OVERDRIVE
-      ? (this.tierDef('OVERDRIVE', this.effects.OVERDRIVE.tier).multiplier ?? 1)
-      : 1;
-    const points = Math.round(
-      word.original.length * this.config.gameplay.scoring.pointsPerLetter * this.multiplier * doubled * overdrive,
-    );
+    // Only typed words score: the quota measures typing, and skills are for survival.
+    const points =
+      cause === 'typed'
+        ? Math.round(word.original.length * this.config.gameplay.scoring.pointsPerLetter * this.multiplier)
+        : 0;
     this.score += points;
     this.wordsCleared++;
 
     const c = this.config.gameplay.coins;
-    this.coinBase.words += c.perWord * doubled;
-    const bonus = word.kind === 'coin' ? c.coinWordBonus * doubled : 0;
+    this.coinBase.words += c.perWord;
+    const bonus = word.kind === 'coin' ? c.coinWordBonus : 0;
     this.coinBase.coinWords += bonus;
-    const coins = Math.round((c.perWord * doubled + bonus) * this.coinMultiplier);
+    const coins = Math.round((c.perWord + bonus) * this.coinMultiplier);
 
     if (word.kind === 'charge' && word.skill) {
       if (this.pool.length < this.capacity) {
@@ -549,72 +475,41 @@ export class GameEngine {
     this.pool.splice(idx, 1);
     this.skillsUsed[skill] = (this.skillsUsed[skill] ?? 0) + 1;
     this.fire(skill, tier);
-    this.checkComplete();
   }
 
-  /** Apply a skill's effect at a tier. Exposed for tests and GAMBLE. */
-  fire(skill: SkillId, tier: number, via?: SkillId): void {
+  /** Apply a skill's effect at a tier, without spending a charge. Exposed for tests. */
+  fire(skill: SkillId, tier: number): void {
+    const behaviour = SKILL_BEHAVIOURS[skill];
     const def = this.tierDef(skill, tier);
     let duration = INSTANT_WEATHER;
-    switch (skill) {
-      case 'FIRE': {
-        const byUrgency = [...this.words].sort((a, b) => b.y - a.y);
-        const n = def.count ?? Math.ceil(byUrgency.length * (def.fraction ?? 1));
-        for (const w of byUrgency.slice(0, n)) this.clearWord(w, 'fire');
-        break;
-      }
-      case 'BOMB':
-        this.bombRadius = def.radius ?? 0;
-        break;
-      case 'CHAIN':
-      case 'ICE':
-      case 'SLOW':
-      case 'MAGNET':
-      case 'OVERDRIVE':
-        duration = def.duration ?? 0;
-        // Timed effects never stack; firing again restarts the timer (FR-39).
-        this.effects[skill] = { remaining: duration, duration, tier };
-        break;
-      case 'REWIND': {
-        const frac = def.fraction ?? 0;
-        for (const w of this.words) w.y = frac >= 1 ? 0 : Math.max(0, w.y - frac * this.field.height);
-        break;
-      }
-      case 'SHRINK': {
-        const n = def.letters ?? 4;
-        for (const w of this.words) {
-          if (w.text.length > n) {
-            w.text = w.text.slice(0, n);
-            w.width = this.wordWidth(w.text, w.kind);
-          }
-        }
-        break;
-      }
-      case 'WIND': {
-        const n = Math.min(def.rows ?? 0, this.pile.length);
-        this.pile.splice(this.pile.length - n, n);
-        this.emit({ type: 'pileRemoved', rows: n });
-        break;
-      }
-      case 'SHIELD':
-        this.shieldLeft = def.words ?? 0;
-        break;
-      case 'DOUBLE':
-        this.doubleLeft = def.words ?? 0;
-        break;
-      case 'LUCK':
-        this.luckBonus = Math.max(this.luckBonus, def.bonus ?? 0);
-        break;
-      case 'GAMBLE': {
-        const other = this.rng.pick(SKILL_IDS.filter((s) => s !== 'GAMBLE'));
-        this.emit({ type: 'skillFired', skill, tier, via, duration: 0.9 });
-        this.version++;
-        this.fire(other, def.tier ?? tier, 'GAMBLE');
-        return;
-      }
+    if (behaviour.timed) {
+      duration = def.duration ?? 0;
+      // Timed effects never stack; firing again restarts the timer (FR-39).
+      this.effects[skill] = { remaining: duration, duration, tier };
     }
+    behaviour.cast?.(this, def);
     this.version++;
-    this.emit({ type: 'skillFired', skill, tier, via, duration });
+    this.emit({ type: 'skillFired', skill, tier, duration });
+  }
+
+  // ---- effects available to skills (see skills.ts) ---------------------------------------
+
+  /** Remove the `count` words closest to landing. */
+  burnLowest(count: number): void {
+    const byUrgency = [...this.words].sort((a, b) => b.y - a.y);
+    for (const w of byUrgency.slice(0, count)) this.clearWord(w, 'skill');
+  }
+
+  /** Push every falling word up by `fraction` of the field height. */
+  pushWordsUp(fraction: number): void {
+    for (const w of this.words) w.y = Math.max(0, w.y - fraction * this.field.height);
+  }
+
+  /** Remove up to `rows` rows from the top of the pile. */
+  removePileRows(rows: number): void {
+    const n = Math.min(rows, this.pile.length);
+    this.pile.splice(this.pile.length - n, n);
+    this.emit({ type: 'pileRemoved', rows: n });
   }
 
   // ---- outputs -------------------------------------------------------------------------
@@ -635,14 +530,14 @@ export class GameEngine {
   }
 
   get accuracy(): number {
-    const total = this.correctSubmissions + this.mistakes + this.forgiven;
+    const total = this.correctSubmissions + this.mistakes;
     return total ? Math.round((this.correctSubmissions / total) * 1000) / 10 : 0;
   }
 
   hud(): HudSnapshot {
-    const effects = TIMED.flatMap((skill) => {
-      const e = this.effects[skill];
-      return e ? [{ skill, remaining: e.remaining, duration: e.duration }] : [];
+    const effects = (Object.keys(this.effects) as SkillId[]).map((skill) => {
+      const e = this.effects[skill]!;
+      return { skill, remaining: e.remaining, duration: e.duration };
     });
     return {
       level: this.params.level,
@@ -654,16 +549,8 @@ export class GameEngine {
       pool: [...this.pool],
       capacity: this.capacity,
       effects,
-      bombArmed: this.bombRadius !== null,
-      doubleLeft: this.doubleLeft,
-      shieldLeft: this.shieldLeft,
-      luckBonus: this.luckBonus,
-      overdriveMultiplier: this.effects.OVERDRIVE
-        ? (this.tierDef('OVERDRIVE', this.effects.OVERDRIVE.tier).multiplier ?? 1)
-        : 1,
       pileRows: this.pile.length,
       dangerRows: this.dangerRows,
-      forgivesLeft: this.forgivesLeft,
       status: this.status,
     };
   }

@@ -20,6 +20,18 @@ npm run test:e2e   # Playwright (run `npx playwright install chromium` once firs
 
 The game engine runs without a browser and takes a seed, so tests are repeatable.
 
+```bash
+npm run sim        # balance simulation: bot typists play the campaign with and without the shop
+SIM=items npx vitest run src/sim --silent=false   # value of each skill and upgrade at each bot's hardest level
+```
+
+## Adding a skill or upgrade
+
+- **Skill:** add its id to `SKILL_IDS` in `src/engine/types.ts`, its data (colour, icon, unlock level, prices, tiers) to `src/data/skills.json`, and its behaviour to `SKILL_BEHAVIOURS` in `src/engine/skills.ts`. Instant skills give a `cast` function; timed skills declare whether they freeze words or change fall speed. Add a 160×160 icon to `src/assets/icons/`.
+- **Upgrade:** add its id to `UPGRADE_IDS`, its data to `src/data/upgrades.json`, and read `upgradeValue(id)` where it takes effect in `src/engine/engine.ts`.
+
+The shop, HUD, charge words and save data pick new entries up automatically. Run `npm run sim` afterwards to check the balance.
+
 ## Layout
 
 | Path | What it is |

@@ -12,7 +12,6 @@ export interface GameConfig {
   extrapolateFromLastRows: number;
   skills: Record<SkillId, SkillDef>;
   skillOrder: SkillId[];
-  skillPrices: number[];
   skillCategories: { id: string; label: string }[];
   upgrades: Record<UpgradeId, UpgradeDef>;
   upgradeOrder: UpgradeId[];
@@ -29,7 +28,6 @@ function build(): GameConfig {
     extrapolateFromLastRows: levelsJson.extrapolateFromLastRows,
     skills,
     skillOrder: (skillsJson.skills as SkillDef[]).map((s) => s.id),
-    skillPrices: skillsJson.prices,
     skillCategories: skillsJson.categories,
     upgrades,
     upgradeOrder: (upgradesJson.upgrades as UpgradeDef[]).map((u) => u.id),
@@ -106,8 +104,9 @@ export function comboTierIndex(combo: number, config: GameConfig = CONFIG): numb
 }
 
 /** Price to go from `tier` to `tier + 1`, or null when maxed. */
-export function skillPrice(tier: number, config: GameConfig = CONFIG): number | null {
-  return tier < config.skillPrices.length ? config.skillPrices[tier] : null;
+export function skillPrice(id: SkillId, tier: number, config: GameConfig = CONFIG): number | null {
+  const def = config.skills[id];
+  return tier < def.tiers.length ? def.prices[tier] : null;
 }
 
 /** Price to go from `rank` to `rank + 1`, or null when maxed. */

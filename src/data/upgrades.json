@@ -1,13 +1,56 @@
 {
   "upgrades": [
-    { "id": "chargeCapacity", "name": "Charge capacity", "description": "+2 charge pool slots", "maxRank": 5, "perRank": 2, "prices": [40, 90, 160, 250, 360] },
-    { "id": "reinforcedFloor", "name": "Reinforced floor", "description": "Raises the danger line by 1 pile row", "maxRank": 3, "perRank": 1, "prices": [40, 90, 160] },
-    { "id": "steadyHands", "name": "Steady hands", "description": "Forgives 1 mistake per level (no penalty, combo kept)", "maxRank": 3, "perRank": 1, "prices": [40, 90, 160] },
-    { "id": "comboKeeper", "name": "Combo keeper", "description": "A mistake drops the combo one tier instead of resetting it", "maxRank": 1, "perRank": 1, "prices": [150] },
-    { "id": "quickCast", "name": "Quick cast", "description": "Skills fire from the first 3 letters of their name", "maxRank": 1, "perRank": 1, "prices": [150] },
-    { "id": "coinBonus", "name": "Coin bonus", "description": "+10% coins from all sources", "maxRank": 5, "perRank": 0.1, "prices": [40, 90, 160, 250, 360] },
-    { "id": "luckyDraw", "name": "Lucky draw", "description": "+10% charge word spawn rate", "maxRank": 3, "perRank": 0.1, "prices": [40, 90, 160] },
-    { "id": "headStart", "name": "Head start", "description": "Start each level with 1 random charge of an unlocked skill", "maxRank": 2, "perRank": 1, "prices": [40, 90] },
-    { "id": "dangerRadar", "name": "Danger radar", "description": "Highlights the word closest to landing", "maxRank": 1, "perRank": 1, "prices": [150] }
+    {
+      "id": "coinBonus",
+      "name": "Coin bonus",
+      "description": "+20% coins from all sources",
+      "unlockLevel": 2,
+      "maxRank": 4,
+      "perRank": 0.2,
+      "prices": [
+        30,
+        80,
+        160,
+        280
+      ]
+    },
+    {
+      "id": "luckyDraw",
+      "name": "Lucky draw",
+      "description": "+50% charge word spawn rate",
+      "unlockLevel": 3,
+      "maxRank": 3,
+      "perRank": 0.5,
+      "prices": [
+        50,
+        120,
+        240
+      ]
+    },
+    {
+      "id": "chargeCapacity",
+      "name": "Charge capacity",
+      "description": "+1 charge pool slot",
+      "unlockLevel": 4,
+      "maxRank": 2,
+      "perRank": 1,
+      "prices": [
+        40,
+        120
+      ]
+    },
+    {
+      "id": "reinforcedFloor",
+      "name": "Reinforced floor",
+      "description": "The pile packs tighter: 3 more words fit under the danger line",
+      "unlockLevel": 6,
+      "maxRank": 3,
+      "perRank": 3,
+      "prices": [
+        40,
+        100,
+        200
+      ]
+    }
   ]
 }

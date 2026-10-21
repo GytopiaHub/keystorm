@@ -38,12 +38,13 @@ test('play a level, pause, pass, shop and persist', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Continue to shop' }).click();
   await expect(page.getByRole('heading', { name: /Shop/ })).toBeVisible();
-  await page.getByTestId('skill-FIRE').getByRole('button').click();
-  await expect(page.getByTestId('skill-FIRE')).toContainText('Tier I');
+  // SLOW is the first skill to unlock (level 2).
+  await page.getByTestId('skill-SLOW').getByRole('button', { name: /Buy/ }).click();
+  await expect(page.getByTestId('skill-SLOW')).toContainText('Tier I');
 
   await page.reload();
   await expect(page.getByRole('button', { name: 'Play level 2' })).toBeVisible();
-  const saved = await page.evaluate(() => window.keystorm.getState().progress.skills.FIRE);
+  const saved = await page.evaluate(() => window.keystorm.getState().progress.skills.SLOW);
   expect(saved).toBe(1);
 });
 

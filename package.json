@@ -12,7 +12,8 @@
     "test:e2e": "playwright test",
     "typecheck": "tsc -b",
     "words": "node scripts/build-words.mjs",
-    "art": "node scripts/build-art.mjs"
+    "art": "node scripts/build-art.mjs",
+    "sim": "SIM=1 vitest run src/sim --silent=false"
   },
   "dependencies": {
     "@fontsource/exo-2": "^5.3.0",

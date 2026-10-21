@@ -69,15 +69,20 @@ export function applyResult(p: Progress, r: AttemptResult): Progress {
   };
 }
 
-/** Returns updated progress, or null when maxed or unaffordable. */
+/** Whether the player has reached the level that opens a skill or upgrade in the shop. */
+export function isUnlocked(p: Progress, def: { unlockLevel: number }): boolean {
+  return p.currentLevel >= def.unlockLevel;
+}
+
+/** Returns updated progress, or null when locked, maxed or unaffordable. */
 export function buySkill(p: Progress, id: SkillId, config: GameConfig = CONFIG): Progress | null {
-  const price = skillPrice(p.skills[id], config);
-  if (price === null || p.coins < price) return null;
+  const price = skillPrice(id, p.skills[id], config);
+  if (price === null || p.coins < price || !isUnlocked(p, config.skills[id])) return null;
   return { ...p, coins: p.coins - price, skills: { ...p.skills, [id]: p.skills[id] + 1 } };
 }
 
 export function buyUpgrade(p: Progress, id: UpgradeId, config: GameConfig = CONFIG): Progress | null {
   const price = upgradePrice(id, p.upgrades[id], config);
-  if (price === null || p.coins < price) return null;
+  if (price === null || p.coins < price || !isUnlocked(p, config.upgrades[id])) return null;
   return { ...p, coins: p.coins - price, upgrades: { ...p.upgrades, [id]: p.upgrades[id] + 1 } };
 }

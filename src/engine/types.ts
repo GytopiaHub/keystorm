@@ -1,32 +1,15 @@
-export const SKILL_IDS = [
-  'FIRE',
-  'BOMB',
-  'CHAIN',
-  'ICE',
-  'SLOW',
-  'REWIND',
-  'SHRINK',
-  'WIND',
-  'SHIELD',
-  'MAGNET',
-  'DOUBLE',
-  'LUCK',
-  'OVERDRIVE',
-  'GAMBLE',
-] as const;
+/**
+ * Every skill in the game. To add one: add its id here, its data (colour, icon, unlock level,
+ * prices, tiers) to src/data/skills.json, and its behaviour to SKILL_BEHAVIOURS in skills.ts.
+ */
+export const SKILL_IDS = ['FIRE', 'ICE', 'SLOW', 'WIND'] as const;
 export type SkillId = (typeof SKILL_IDS)[number];
 
-export const UPGRADE_IDS = [
-  'chargeCapacity',
-  'reinforcedFloor',
-  'steadyHands',
-  'comboKeeper',
-  'quickCast',
-  'coinBonus',
-  'luckyDraw',
-  'headStart',
-  'dangerRadar',
-] as const;
+/**
+ * Every shop upgrade. To add one: add its id here, its data to src/data/upgrades.json, and
+ * read its value with `upgradeValue(id)` where it takes effect in the engine.
+ */
+export const UPGRADE_IDS = ['chargeCapacity', 'reinforcedFloor', 'coinBonus', 'luckyDraw'] as const;
 export type UpgradeId = (typeof UPGRADE_IDS)[number];
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
@@ -47,27 +30,32 @@ export interface LevelParams {
   chargeWordChance: number;
 }
 
+/** One tier's numbers. Each skill reads the fields it needs. */
 export interface SkillTierDef {
   label: string;
+  /** Words affected (FIRE). */
   count?: number;
-  fraction?: number;
-  radius?: number;
+  /** Seconds a timed effect lasts (ICE, SLOW). */
   duration?: number;
+  /** Fall-speed factor while active (SLOW). */
   speed?: number;
-  letters?: number;
+  /** Pile rows removed (WIND). */
   rows?: number;
-  words?: number;
-  bonus?: number;
-  multiplier?: number;
-  tier?: number;
+  /** Fraction of the field height falling words are pushed back up (WIND). */
+  push?: number;
 }
 
 export interface SkillDef {
   id: SkillId;
   category: string;
   color: string;
+  /** File name in src/assets/icons/, without extension. */
   icon: string;
   description: string;
+  /** Level the player must reach before the shop offers this skill. */
+  unlockLevel: number;
+  /** Price of Tier I, II and III. */
+  prices: number[];
   tiers: SkillTierDef[];
 }
 
@@ -75,6 +63,8 @@ export interface UpgradeDef {
   id: UpgradeId;
   name: string;
   description: string;
+  /** Level the player must reach before the shop offers this upgrade. */
+  unlockLevel: number;
   maxRank: number;
   perRank: number;
   prices: number[];
@@ -104,27 +94,24 @@ export interface PileRow {
   kind: WordKind;
 }
 
-export type TimedEffect = 'CHAIN' | 'ICE' | 'SLOW' | 'MAGNET' | 'OVERDRIVE';
-
 export interface ActiveEffect {
   remaining: number;
   duration: number;
   tier: number;
 }
 
-export type ClearCause = 'typed' | 'fire' | 'bomb' | 'chain' | 'levelEnd';
+/** How a word left the field: typed by the player, removed by a skill, or swept at level end. */
+export type ClearCause = 'typed' | 'skill' | 'levelEnd';
 
 export type EngineEvent =
   | { type: 'cleared'; word: Word; cause: ClearCause; points: number; coins: number }
-  | { type: 'mistake'; forgiven: boolean; text: string }
+  | { type: 'mistake'; text: string }
   | { type: 'noCharge'; skill: SkillId; locked: boolean }
-  | { type: 'skillFired'; skill: SkillId; tier: number; via?: SkillId; duration: number }
+  | { type: 'skillFired'; skill: SkillId; tier: number; duration: number }
   | { type: 'chargeGained'; skill: SkillId }
   | { type: 'poolFull'; skill: SkillId }
-  | { type: 'landed'; word: Word; shielded: boolean }
+  | { type: 'landed'; word: Word }
   | { type: 'comboTier'; combo: number; multiplier: number }
-  | { type: 'bomb'; x: number; y: number; radius: number }
-  | { type: 'chain'; from: { x: number; y: number }; to: { x: number; y: number }[] }
   | { type: 'pileRemoved'; rows: number }
   | { type: 'levelComplete' }
   | { type: 'levelFailed' };

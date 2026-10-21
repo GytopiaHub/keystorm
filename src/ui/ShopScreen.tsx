@@ -1,6 +1,7 @@
 import { useState, type CSSProperties } from 'react';
 import { CONFIG, skillPrice, upgradePrice } from '../engine/config';
 import type { SkillId, UpgradeId } from '../engine/types';
+import { isUnlocked } from '../state/progress';
 import { useGame } from '../state/store';
 import { Button, Coins, ROMAN, Screen, SkillIcon } from './common';
 
@@ -51,27 +52,64 @@ export function ShopScreen() {
   );
 }
 
+/** Shop items in the order the player unlocks them. */
+const byUnlock = <T extends string>(ids: T[], defs: Record<T, { unlockLevel: number }>) =>
+  [...ids].sort((a, b) => defs[a].unlockLevel - defs[b].unlockLevel);
+
+function LockIcon() {
+  return (
+    <svg aria-hidden viewBox="0 0 16 16" className="h-3.5 w-3.5 fill-current">
+      <path d="M4 7V5a4 4 0 1 1 8 0v2h.5A1.5 1.5 0 0 1 14 8.5v5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 13.5v-5A1.5 1.5 0 0 1 3.5 7H4Zm2 0h4V5a2 2 0 1 0-4 0v2Z" />
+    </svg>
+  );
+}
+
+/** Button for a locked, maxed, unaffordable or buyable item. */
+function BuyButton({
+  unlockLevel,
+  open,
+  price,
+  coins,
+  label,
+  onBuy,
+}: {
+  unlockLevel: number;
+  open: boolean;
+  price: number | null;
+  coins: number;
+  label: string;
+  onBuy: () => void;
+}) {
+  const canBuy = open && price !== null && coins >= price;
+  return (
+    <Button variant={canBuy ? 'primary' : 'secondary'} disabled={!canBuy} onClick={onBuy} className="mt-auto">
+      {!open ? (
+        <span className="inline-flex items-center gap-2">
+          <LockIcon /> Reach level {unlockLevel}
+        </span>
+      ) : price === null ? (
+        'Maxed'
+      ) : (
+        <span className="inline-flex items-center gap-2">
+          {label} · <Coins value={price} plain />
+        </span>
+      )}
+    </Button>
+  );
+}
+
 function SkillsTab() {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <p className="text-sm text-slate-400">
-        Unlocked skills drop charge words in play. Clear one to store a charge, then type the skill’s name to fire it.
+        New skills open up as you climb. Owned skills drop charge words in play: clear one to store a charge, then type the
+        skill’s name to fire it.
       </p>
-      {CONFIG.skillCategories.map((cat) => (
-        <section key={cat.id}>
-          <h2 className="mb-3 flex items-center gap-3 text-xs font-bold uppercase tracking-[0.25em] text-slate-400">
-            {cat.label}
-            <span className="h-px flex-1 bg-gradient-to-r from-white/15 to-transparent" />
-          </h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {CONFIG.skillOrder
-              .filter((s) => CONFIG.skills[s].category === cat.id)
-              .map((s) => (
-                <SkillCard key={s} id={s} />
-              ))}
-          </div>
-        </section>
-      ))}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {byUnlock(CONFIG.skillOrder, CONFIG.skills).map((s) => (
+          <SkillCard key={s} id={s} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -80,9 +118,11 @@ function SkillCard({ id }: { id: SkillId }) {
   const tier = useGame((s) => s.progress.skills[id]);
   const coins = useGame((s) => s.progress.coins);
   const buy = useGame((s) => s.buySkill);
+  const open = useGame((s) => isUnlocked(s.progress, CONFIG.skills[id]));
   const [bought, setBought] = useState(0);
   const def = CONFIG.skills[id];
-  const price = skillPrice(tier);
+  const category = CONFIG.skillCategories.find((c) => c.id === def.category)?.label;
+  const price = skillPrice(id, tier);
   const current = tier > 0 ? def.tiers[tier - 1].label : null;
   const next = price !== null ? def.tiers[tier].label : null;
   return (
@@ -97,18 +137,29 @@ function SkillCard({ id }: { id: SkillId }) {
           <div
             aria-hidden
             className="absolute inset-2 rounded-full blur-lg"
-            style={{ background: def.color, opacity: tier ? 0.45 : 0.08 }}
+            style={{ background: def.color, opacity: tier ? 0.45 : open ? 0.2 : 0.08 }}
           />
-          <SkillIcon id={id} size={60} className={`relative ${tier ? '' : 'locked-icon'}`} />
+          <SkillIcon id={id} size={60} className={`relative ${open ? '' : 'locked-icon'}`} />
         </div>
         <div className="flex-1">
           <div className="font-display font-black tracking-wider" style={{ color: def.color, textShadow: `0 0 12px ${def.color}88` }}>
             {id}
           </div>
           <div className="text-xs text-slate-400">{def.description}</div>
+          {category && <div className="mt-1 text-[10px] uppercase tracking-[0.2em] text-slate-500">{category}</div>}
         </div>
         <div className="flex flex-col items-end gap-1">
-          <span className={`text-xs font-bold ${tier ? 'text-white' : 'text-slate-500'}`}>{tier ? `Tier ${ROMAN[tier]}` : 'Locked'}</span>
+          <span className={`inline-flex items-center gap-1 text-xs font-bold ${tier ? 'text-white' : 'text-slate-500'}`}>
+            {tier ? (
+              `Tier ${ROMAN[tier]}`
+            ) : open ? (
+              'Not owned'
+            ) : (
+              <>
+                <LockIcon /> Level {def.unlockLevel}
+              </>
+            )}
+          </span>
           <div className="flex gap-1" aria-hidden>
             {[1, 2, 3].map((t) => (
               <span
@@ -134,23 +185,17 @@ function SkillCard({ id }: { id: SkillId }) {
           </div>
         )}
       </div>
-      <Button
-        variant={price !== null && coins >= price ? 'primary' : 'secondary'}
-        disabled={price === null || coins < price}
-        onClick={() => {
+      <BuyButton
+        unlockLevel={def.unlockLevel}
+        open={open}
+        price={price}
+        coins={coins}
+        label={tier ? 'Upgrade' : 'Buy'}
+        onBuy={() => {
           buy(id);
           setBought((n) => n + 1);
         }}
-        className="mt-auto"
-      >
-        {price === null ? (
-          'Maxed'
-        ) : (
-          <span className="inline-flex items-center gap-2">
-            {tier ? 'Upgrade' : 'Unlock'} · <Coins value={price} plain />
-          </span>
-        )}
-      </Button>
+      />
     </div>
   );
 }
@@ -158,7 +203,7 @@ function SkillCard({ id }: { id: SkillId }) {
 function UpgradesTab() {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      {CONFIG.upgradeOrder.map((u) => (
+      {byUnlock(CONFIG.upgradeOrder, CONFIG.upgrades).map((u) => (
         <UpgradeCard key={u} id={u} />
       ))}
     </div>
@@ -169,6 +214,7 @@ function UpgradeCard({ id }: { id: UpgradeId }) {
   const rank = useGame((s) => s.progress.upgrades[id]);
   const coins = useGame((s) => s.progress.coins);
   const buy = useGame((s) => s.buyUpgrade);
+  const open = useGame((s) => isUnlocked(s.progress, CONFIG.upgrades[id]));
   const [bought, setBought] = useState(0);
   const def = CONFIG.upgrades[id];
   const price = upgradePrice(id, rank);
@@ -181,8 +227,14 @@ function UpgradeCard({ id }: { id: UpgradeId }) {
     >
       <div className="flex items-center justify-between">
         <div className="font-display font-bold tracking-wide">{def.name}</div>
-        <span className="text-xs font-bold tabular-nums text-slate-300">
-          Rank {rank}/{def.maxRank}
+        <span className="inline-flex items-center gap-1 text-xs font-bold tabular-nums text-slate-300">
+          {open ? (
+            `Rank ${rank}/${def.maxRank}`
+          ) : (
+            <>
+              <LockIcon /> Level {def.unlockLevel}
+            </>
+          )}
         </span>
       </div>
       <div className="flex gap-1">
@@ -194,23 +246,17 @@ function UpgradeCard({ id }: { id: UpgradeId }) {
         {price !== null && <span className="text-slate-400">Next rank: </span>}
         {def.description}
       </div>
-      <Button
-        variant={price !== null && coins >= price ? 'primary' : 'secondary'}
-        disabled={price === null || coins < price}
-        onClick={() => {
+      <BuyButton
+        unlockLevel={def.unlockLevel}
+        open={open}
+        price={price}
+        coins={coins}
+        label={`Buy rank ${rank + 1}`}
+        onBuy={() => {
           buy(id);
           setBought((n) => n + 1);
         }}
-        className="mt-auto"
-      >
-        {price === null ? (
-          'Maxed'
-        ) : (
-          <span className="inline-flex items-center gap-2">
-            Buy rank {rank + 1} · <Coins value={price} plain />
-          </span>
-        )}
-      </Button>
+      />
     </div>
   );
 }
