@@ -1,4 +1,4 @@
-import { CONFIG, comboMultiplier, comboTierIndex, levelParams, levelReward, type GameConfig } from './config';
+import { CONFIG, comboMultiplier, comboTierIndex, levelParams, levelReward, type GameConfig, type GameplayConfig } from './config';
 import { Rng, randomSeed } from './rng';
 import {
   SKILL_IDS,
@@ -109,6 +109,7 @@ export class GameEngine {
 
   constructor(opts: EngineOptions) {
     this.config = opts.config ?? CONFIG;
+    this.field = { ...this.config.gameplay.field };
     this.params = levelParams(opts.level, opts.difficulty, opts.wordList, this.config);
     this.skills = { ...opts.skills };
     this.upgrades = { ...opts.upgrades };
@@ -123,8 +124,29 @@ export class GameEngine {
 
   // ---- derived values ------------------------------------------------------------------
 
-  get field() {
-    return this.config.gameplay.field;
+  /**
+   * Play-field geometry. Starts as the configured size; `fitField` can reshape it to fill the
+   * screen before play begins.
+   */
+  field: GameplayConfig['field'];
+
+  /** Field height relative to the configured one; distances and speeds scale by this. */
+  get heightScale(): number {
+    return this.field.height / this.config.gameplay.field.height;
+  }
+
+  /**
+   * Reshape the field to `width` × `height` (logical pixels) before the attempt starts.
+   * Fall speed and pile rows scale with the height, so fall time and pile capacity match any
+   * screen; a wider field only spreads words out. Returns false once play has begun.
+   */
+  fitField(width: number, height: number): boolean {
+    if (this.elapsed > 0 || this.words.length || this.pile.length) return false;
+    const base = this.config.gameplay.field;
+    const k = height / base.height;
+    this.field = { ...base, width: Math.round(width), height: Math.round(height), rowHeight: base.rowHeight * k };
+    this.version++;
+    return true;
   }
 
   get capacity(): number {
@@ -212,7 +234,7 @@ export class GameEngine {
   }
 
   private fallSpeed(): number {
-    let speed = this.params.fallSpeed;
+    let speed = this.params.fallSpeed * this.heightScale;
     if (this.effects.SLOW) speed *= this.tierDef('SLOW', this.effects.SLOW.tier).speed ?? 1;
     if (this.effects.OVERDRIVE) speed *= this.tierDef('OVERDRIVE', this.effects.OVERDRIVE.tier).speed ?? 1;
     return speed;
@@ -225,7 +247,8 @@ export class GameEngine {
     for (const word of [...this.words]) {
       if (magnet && (word.kind === 'coin' || word.kind === 'charge')) {
         const target = this.landingY - this.config.gameplay.magnet.hoverRowsAbovePile * this.field.rowHeight - h;
-        if (word.y < target) word.y = Math.min(target, word.y + this.config.gameplay.magnet.pullSpeed * dt);
+        const pull = this.config.gameplay.magnet.pullSpeed * this.heightScale;
+        if (word.y < target) word.y = Math.min(target, word.y + pull * dt);
       } else {
         word.y += speed * word.speedMul * dt;
       }

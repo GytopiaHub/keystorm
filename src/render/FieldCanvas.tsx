@@ -28,6 +28,53 @@ interface Props {
 
 const { width, height } = CONFIG.gameplay.field;
 
+/** Logical-to-screen scale never exceeds this, so words don't balloon on large monitors. */
+const MAX_SCALE = 1.4;
+/** Narrow windows get a taller field rather than one too thin to fit words side by side. */
+const MIN_WIDTH = 720;
+/** Upper bound on backing pixels per logical pixel, to keep 4K screens fast. */
+const MAX_RESOLUTION = 3;
+
+/**
+ * Make the field fill its box: before play starts the engine's field is reshaped to the box's
+ * aspect, then the canvas is sized to the box and rendered at the real on-screen pixel
+ * density, so text and sprites are drawn at their displayed size instead of stretched by CSS.
+ */
+function useFillField(app: ReturnType<typeof useApplication>['app'], ready: boolean, engine: GameEngine) {
+  useEffect(() => {
+    if (!ready) return;
+    const canvas = app.canvas;
+    const box = canvas.parentElement;
+    if (!box) return;
+    const fit = () => {
+      const bw = box.clientWidth;
+      const bh = box.clientHeight;
+      if (!bw || !bh) return;
+      const s = Math.min(MAX_SCALE, bh / height, bw / MIN_WIDTH);
+      // Only takes effect before the first frame; later resizes keep the field and fit it.
+      engine.fitField(bw / s, bh / s);
+      const field = engine.field;
+      const scale = Math.min(bw / field.width, bh / field.height);
+      const resolution = Math.min(MAX_RESOLUTION, (window.devicePixelRatio || 1) * scale);
+      // Changing resolution makes Pixi re-render every text at the new density.
+      if (app.renderer.resolution !== resolution || app.renderer.width !== field.width) {
+        app.renderer.resize(field.width, field.height, resolution);
+      }
+      canvas.style.width = `${field.width * scale}px`;
+      canvas.style.height = `${field.height * scale}px`;
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(box);
+    // Moving the window to a screen with a different pixel ratio doesn't resize anything.
+    window.addEventListener('resize', fit);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', fit);
+    };
+  }, [app, ready, engine]);
+}
+
 export function FieldCanvas(props: Props) {
   return (
     <Application
@@ -36,7 +83,6 @@ export function FieldCanvas(props: Props) {
       background={0x070a14}
       antialias
       autoDensity={false}
-      resolution={Math.min(2, window.devicePixelRatio || 1)}
       className="field-canvas"
     >
       <Scene {...props} />
@@ -49,6 +95,7 @@ function Scene({ engine, paused, reducedMotion, onFrame }: Props) {
   const renderer = useRef<FieldRenderer | null>(null);
   const latest = useRef({ engine, paused, onFrame, reducedMotion });
   latest.current = { engine, paused, onFrame, reducedMotion };
+  useFillField(app, isInitialised, engine);
 
   useEffect(() => {
     if (!isInitialised) return;
@@ -56,7 +103,7 @@ function Scene({ engine, paused, reducedMotion, onFrame }: Props) {
     let cancelled = false;
     assetsReady().then(() => {
       if (cancelled) return;
-      r = new FieldRenderer(latest.current.reducedMotion);
+      r = FieldRenderer.create(latest.current.engine, latest.current.reducedMotion);
       app.stage.addChild(r.root);
       renderer.current = r;
     });

@@ -4,9 +4,10 @@ import { CONFIG } from '../engine/config';
 import type { GameEngine } from '../engine/engine';
 import type { EngineEvent, SkillId, Word } from '../engine/types';
 
-const FIELD = CONFIG.gameplay.field;
-const W = FIELD.width;
-const H = FIELD.height;
+// One field is drawn at a time; `FieldRenderer.create` sets these from the engine's field.
+let FIELD = CONFIG.gameplay.field;
+let W = FIELD.width;
+let H = FIELD.height;
 const WORD_H = FIELD.wordHeight;
 
 export const WORD_FONT = `"JetBrains Mono", "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace`;
@@ -169,6 +170,13 @@ function edgeGlow(clear: number): Sprite {
  * per attempt and it then updates on Pixi's ticker without involving React.
  */
 export class FieldRenderer {
+  static create(engine: GameEngine, reducedMotion: boolean): FieldRenderer {
+    FIELD = engine.field;
+    W = FIELD.width;
+    H = FIELD.height;
+    return new FieldRenderer(reducedMotion);
+  }
+
   readonly root = new Container();
   private stage = new Container();
   private sky = new Sprite(tex(ART.sky));
@@ -213,7 +221,7 @@ export class FieldRenderer {
   private pileStyle: TextStyle;
   private charWidth: number;
 
-  constructor(private reducedMotion: boolean) {
+  private constructor(private reducedMotion: boolean) {
     this.textStyle = new TextStyle({ fontFamily: WORD_FONT, fontSize: 22, fontWeight: '700', fill: 0xffffff });
     this.pileStyle = new TextStyle({ fontFamily: WORD_FONT, fontSize: 14, fontWeight: '700', fill: 0xd6f1ff, letterSpacing: 2 });
     this.charWidth = CanvasTextMetrics.measureText('MMMMMMMMMM', this.textStyle).width / 10;
@@ -671,8 +679,12 @@ export class FieldRenderer {
     const t = this.reducedMotion ? 0 : this.time;
     const wave = (x: number) => top + Math.sin(x * 0.018 + t * 1.8) * 3 + Math.sin(x * 0.047 - t * 2.6) * 1.6;
 
+    // Sample every 16px and always end exactly at the right edge, whatever the field width.
+    const xs: number[] = [];
+    for (let x = 0; x < W; x += 16) xs.push(x);
+    xs.push(W);
     const pts: number[] = [];
-    for (let x = 0; x <= W; x += 16) pts.push(x, wave(x));
+    for (const x of xs) pts.push(x, wave(x));
     g.poly([...pts, W, H, 0, H]).fill({ color: 0x1569b0, alpha: 0.82 });
 
     // Depth bands: darker toward the bottom.
@@ -691,10 +703,10 @@ export class FieldRenderer {
       }
     }
     g.moveTo(0, wave(0));
-    for (let x = 16; x <= W; x += 16) g.lineTo(x, wave(x));
+    for (const x of xs) g.lineTo(x, wave(x));
     g.stroke({ width: 2.5, color: 0xc8f2ff, alpha: 0.85 });
     g.moveTo(0, wave(0) + 5);
-    for (let x = 16; x <= W; x += 16) g.lineTo(x, wave(x) + 5);
+    for (const x of xs) g.lineTo(x, wave(x) + 5);
     g.stroke({ width: 6, color: 0x5cc8ff, alpha: 0.18 });
 
     if (!this.reducedMotion && engine.pile.length > 0 && Math.random() < 0.25) {
@@ -705,8 +717,11 @@ export class FieldRenderer {
   // ---- background, weather and particles ------------------------------------------------
 
   private drawSky(): void {
-    this.sky.width = W;
-    this.sky.height = H;
+    // Cover the field without stretching the painting, keeping its horizon centred.
+    const scale = Math.max(W / this.sky.texture.width, H / this.sky.texture.height);
+    this.sky.scale.set(scale);
+    this.sky.anchor.set(0.5);
+    this.sky.position.set(W / 2, H / 2);
     // Knock the painting back so white words stay the brightest thing on screen.
     this.skyShade.rect(0, 0, W, H).fill({ color: 0x03050c, alpha: 0.38 });
   }
@@ -786,7 +801,7 @@ export class FieldRenderer {
     const rewind = this.strength(engine, 'REWIND') > 0;
     const wind = this.strength(engine, 'WIND') > 0;
     const ice = !!engine.effects.ICE;
-    const target = overdrive ? 300 : 110;
+    const target = Math.round((overdrive ? 300 : 110) * (W / 960));
     while (this.rain.length < target) this.rain.push(this.newDrop(true));
     if (this.rain.length > target) this.rain.length = target;
 
@@ -1020,6 +1035,9 @@ export class FieldRenderer {
     const beat = this.reducedMotion ? 0.7 : 0.5 + 0.5 * Math.sin(this.time * 7);
     this.dangerGlow.alpha = Math.min(1, danger * beat + this.hurt * 0.8);
     this.hurt = Math.max(0, this.hurt - dt * 2.5);
+
+    // Full-screen layers cost fill rate even when transparent, so skip them when unseen.
+    for (const layer of [this.frost, this.fireFrame, this.comboGlow, this.dangerGlow]) layer.visible = layer.alpha > 0.01;
 
     if (!this.reducedMotion && this.flash > 0) {
       o.rect(0, 0, W, H).fill({ color: 0xe8f0ff, alpha: Math.min(0.6, this.flash) * 0.55 });

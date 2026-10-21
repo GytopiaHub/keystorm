@@ -19,7 +19,8 @@ export function PlayScreen() {
 
   const lastVersion = useRef(-1);
   const hudClock = useRef(0);
-  const endClock = useRef(0);
+  /** When the attempt ended, in performance.now() ms. */
+  const endedAt = useRef<number | null>(null);
   const ended = useRef(false);
 
   const onFrame = useCallback((dt: number): EngineEvent[] => {
@@ -39,8 +40,9 @@ export function PlayScreen() {
     }
 
     if (eng.status !== 'playing' && !ended.current) {
-      endClock.current += dt;
-      if (endClock.current >= END_DELAY) {
+      // Wall-clock time, so the result screen arrives on time even if frames are slow.
+      endedAt.current ??= performance.now();
+      if (performance.now() - endedAt.current >= END_DELAY * 1000) {
         ended.current = true;
         s.endAttempt();
       }
@@ -58,7 +60,7 @@ export function PlayScreen() {
       <div aria-hidden className="art-bg art-dim" style={{ backgroundImage: `url(${ART.sky})` }} />
       <TopBar />
       <div className="relative min-h-0 flex-1">
-        <div className={`h-full w-full ${paused ? 'invisible' : ''}`}>
+        <div className={`flex h-full w-full items-center justify-center ${paused ? 'invisible' : ''}`}>
           <FieldCanvas engine={engine} paused={paused} reducedMotion={reducedMotion} onFrame={onFrame} />
         </div>
         {!paused && <EffectsBar />}

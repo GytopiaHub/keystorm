@@ -105,6 +105,30 @@ describe('spawning and movement', () => {
   });
 });
 
+describe('field size', () => {
+  it('scales fall speed and pile rows with height so timing is the same', () => {
+    const base = quiet();
+    const tall = quiet();
+    expect(tall.fitField(1400, 840)).toBe(true);
+    expect(tall.field.rowHeight).toBeCloseTo(CONFIG.gameplay.field.rowHeight * 1.5);
+    const a = base.addWord('cat');
+    const b = tall.addWord('cat');
+    for (let i = 0; i < 120; i++) {
+      base.step(GameEngine.STEP);
+      tall.step(GameEngine.STEP);
+    }
+    expect(b.y / tall.field.height).toBeCloseTo(a.y / base.field.height);
+    expect(tall.dangerY / tall.field.height).toBeCloseTo(base.dangerY / base.field.height);
+  });
+
+  it('refuses to reshape once play has started', () => {
+    const e = quiet();
+    e.step(GameEngine.STEP);
+    expect(e.fitField(1400, 840)).toBe(false);
+    expect(e.field.width).toBe(CONFIG.gameplay.field.width);
+  });
+});
+
 describe('typing', () => {
   it('clears a matching word case-insensitively and scores by length', () => {
     const e = quiet();
